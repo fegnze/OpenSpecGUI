@@ -1,0 +1,86 @@
+'use strict';
+
+var fsPromises = require('node:fs/promises');
+var os = require('node:os');
+var path = require('node:path');
+
+async function writeFile(root, relativePath, content) {
+    var target = path.join(root, relativePath);
+    await fsPromises.mkdir(path.dirname(target), { recursive: true });
+    await fsPromises.writeFile(target, content, 'utf8');
+    return target;
+}
+
+/**
+ * 创建包含完整、不完整和归档内容的独立 OpenSpec 测试项目。
+ * @returns {Promise<object>} 测试项目句柄
+ */
+async function createFixtureProject() {
+    var root = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'openspec-workbench-'));
+    var outsideFile = await writeFile(root, 'outside-secret.md', '# 不应读取\n\nsecret');
+
+    await writeFile(root, 'package.json', '{"name":"fixture-project","productName":"Fixture Product","displayName":"Fixture Display"}\n');
+    await writeFile(root, 'openspec/config.yaml', 'schema: spec-driven\n');
+    await writeFile(root, 'openspec/specs/core/spec.md', [
+        '# core Specification',
+        '',
+        '## Purpose',
+        '',
+        '核心能力说明。',
+        '',
+        '## Requirements',
+        '',
+        '### Requirement: 用户可以查看状态',
+        '',
+        '系统 MUST 展示状态。',
+        '',
+        '#### Scenario: 状态存在',
+        '',
+        '- **WHEN** 用户打开页面',
+        '- **THEN** 页面展示状态',
+        ''
+    ].join('\n'));
+    await writeFile(root, 'openspec/changes/add-feature/proposal.md', '# Proposal: 新增测试能力\n\n## Why\n\n用于验证搜索与提案解析。\n');
+    await writeFile(root, 'openspec/changes/add-feature/design.md', '## Context\n\n使用独立夹具。\n');
+    await writeFile(root, 'openspec/changes/add-feature/tasks.md', '## 1. 实施\n\n- [x] 1.1 完成解析\n- [ ] 1.2 完成界面\n');
+    await writeFile(root, 'openspec/changes/add-feature/specs/core/spec.md', '## ADDED Requirements\n\n### Requirement: 新状态\n\n系统 MUST 展示新状态。\n\n#### Scenario: 展示新状态\n- **WHEN** 数据存在\n- **THEN** 展示数据\n');
+    await writeFile(root, 'openspec/changes/incomplete-change/design.md', '## Context\n\n```js\nvar open = true;\n');
+    await writeFile(root, 'openspec/changes/incomplete-change/tasks.md', '## 1. 待办\n\n- [ ] 1.1 补充提案\n');
+    await writeFile(root, 'openspec/changes/archive/2026-01-01-old-change/proposal.md', '# Proposal: 历史提案\n\n## Why\n\n验证归档扫描。\n');
+    await writeFile(root, 'openspec/changes/archive/2026-01-01-old-change/tasks.md', '## 1. 完成\n\n- [x] 1.1 已完成\n');
+
+    return {
+        root: root,
+        outsideFile: outsideFile,
+        write: function (relativePath, content) { return writeFile(root, relativePath, content); },
+        cleanup: function () { return fsPromises.rm(root, { recursive: true, force: true }); }
+    };
+}
+
+function officialStatusProvider() {
+    return Promise.resolve({
+        source: 'cli',
+        diagnostic: null,
+        items: new Map([['add-feature', {
+            name: 'add-feature',
+            completedTasks: 2,
+            totalTasks: 3,
+            status: 'in-progress',
+            lastModified: '2026-08-21T03:00:00.000Z'
+        }]])
+    });
+}
+
+function inferredStatusProvider() {
+    return Promise.resolve({
+        source: 'inferred',
+        diagnostic: '测试：CLI 不可用',
+        items: new Map()
+    });
+}
+
+module.exports = {
+    createFixtureProject: createFixtureProject,
+    inferredStatusProvider: inferredStatusProvider,
+    officialStatusProvider: officialStatusProvider
+};

@@ -1,0 +1,42 @@
+{
+  "name": "openspec-gui",
+  "productName": "OpenSpec GUI",
+  "version": "0.1.0",
+  "description": "A local, multi-project OpenSpec desktop workbench",
+  "main": "src/main/index.js",
+  "private": true,
+  "license": "MIT",
+  "author": "OpenSpec GUI Contributors",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "electron-forge start",
+    "icons:build": "bash scripts/build-icons.sh",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node --test test/e2e.test.js",
+    "test:visual": "playwright test --config playwright.visual.config.js",
+    "test:visual:update": "playwright test --config playwright.visual.config.js --update-snapshots",
+    "check": "node scripts/check-syntax.js",
+    "package": "electron-forge package",
+    "package:mac:arm64": "electron-forge package --platform=darwin --arch=arm64",
+    "package:mac:x64": "electron-forge package --platform=darwin --arch=x64",
+    "make": "electron-forge make",
+    "make:mac:arm64": "electron-forge make --platform=darwin --arch=arm64",
+    "make:mac:x64": "electron-forge make --platform=darwin --arch=x64"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "8.0.0-alpha.9",
+    "@electron-forge/maker-zip": "8.0.0-alpha.9",
+    "@playwright/test": "1.62.1",
+    "axe-core": "4.13.0",
+    "electron": "43.4.1",
+    "playwright-core": "1.62.1"
+  },
+  "overrides": {
+    "@electron/packager": "20.3.0",
+    "@electron/rebuild": "4.2.0",
+    "tar": "7.5.22",
+    "tmp": "0.2.7"
+  }
+}

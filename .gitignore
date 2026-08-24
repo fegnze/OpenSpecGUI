@@ -1,0 +1,7 @@
+node_modules/
+out/
+.DS_Store
+*.log
+coverage/
+.openspec-gui-test-data/
+artifacts/visual-results/

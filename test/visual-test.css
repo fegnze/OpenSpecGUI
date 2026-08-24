@@ -1,0 +1,12 @@
+:root {
+    --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif !important;
+    --font-display: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif !important;
+    --font-mono: "SFMono-Regular", Menlo, monospace !important;
+}
+
+*, *::before, *::after {
+    animation: none !important;
+    caret-color: transparent !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+}
