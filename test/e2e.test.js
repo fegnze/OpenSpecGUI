@@ -147,6 +147,29 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         assert.deepEqual(await page.locator('.proposal-lane h2').allTextContents(), ['进行中', '待归档', '需要处理']);
         assert.equal(await page.locator('.primary-nav [data-route]').count(), 3);
         assert.equal(await page.locator('[data-route="changes"]').count(), 0);
+        var overviewProgress = await page.locator('.proposal-lane-card[data-entity-id="modern-console"] .progress-bar').evaluate(function (progressBar) {
+            var segments = Array.from(progressBar.querySelectorAll('.progress-segment'));
+            var partial = segments.find(function (segment) { return segment.classList.contains('is-partial'); });
+            var rect = progressBar.getBoundingClientRect();
+            return {
+                display: getComputedStyle(progressBar).display,
+                width: rect.width,
+                height: rect.height,
+                segmentCount: segments.length,
+                segmentsHaveSize: segments.every(function (segment) {
+                    var segmentRect = segment.getBoundingClientRect();
+                    return segmentRect.width > 0 && segmentRect.height > 0;
+                }),
+                filledCount: segments.filter(function (segment) { return segment.classList.contains('is-filled'); }).length,
+                partialClass: partial ? partial.className : ''
+            };
+        });
+        assert.equal(overviewProgress.display, 'grid');
+        assert.ok(overviewProgress.width > 0 && overviewProgress.height > 0);
+        assert.equal(overviewProgress.segmentCount, 10);
+        assert.equal(overviewProgress.segmentsHaveSize, true);
+        assert.equal(overviewProgress.filledCount, 8);
+        assert.match(overviewProgress.partialClass, /partial-3/);
         await uiHelpers.assertNoSeriousA11yViolations(page, '首页');
         await uiHelpers.assertNoPageOverflow(page, '宽桌面首页');
         await uiHelpers.assertReachable(page, ['#project-picker-button', '#project-manage-button', '#refresh-button', '[data-route="overview"]'], '首页');

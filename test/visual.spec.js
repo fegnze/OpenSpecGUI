@@ -45,6 +45,10 @@ test('关键工作台界面视觉基线', async function () {
     await page.waitForSelector('.control-header');
     await screenshot('overview-wide-light.png');
 
+    await uiHelpers.setTheme(page, 'dark');
+    await screenshot('overview-wide-dark.png');
+    await uiHelpers.setTheme(page, 'light');
+
     await page.locator('#project-picker-button').click();
     await page.waitForSelector('#project-options:not([hidden])');
     await screenshot('project-picker-open-light.png');

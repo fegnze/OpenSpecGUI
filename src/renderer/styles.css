@@ -965,14 +965,14 @@ h1 { font-size: var(--text-page); }
 .proposal-lane-card-shell.is-attention:hover,
 .proposal-lane-card-shell.is-attention:has(button:focus-visible) { border-top-color: var(--red); }
 .proposal-lane-copy { align-self: start; grid-column: 2; grid-row: 1; margin: 42px 7px 0 1px; }
-.lane-card-meta, .lane-card-progress > span { align-items: center; display: flex; justify-content: space-between; }
+.lane-card-meta, .lane-card-progress > span:first-child { align-items: center; display: flex; justify-content: space-between; }
 .lane-card-meta time, .lane-card-copy small { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-xs); }
 .lane-card-copy { min-width: 0; }
 .lane-card-copy strong, .lane-card-copy small { display: block; overflow-wrap: anywhere; }
 .lane-card-copy strong { font-size: var(--text-control); font-weight: 500; line-height: 1.45; }
 .lane-card-copy small { margin-top: 4px; }
 .lane-card-progress { align-self: end; border-top: 1px solid var(--line); padding-top: 9px; }
-.lane-card-progress > span { margin-bottom: 7px; }
+.lane-card-progress > span:first-child { margin-bottom: 7px; }
 .lane-card-progress b, .lane-card-progress em { font-family: var(--font-mono); font-size: var(--text-xs); font-style: normal; font-weight: 400; }
 .lane-card-progress b { color: var(--muted); }
 .lane-empty { align-items: center; color: var(--muted); display: flex; font-size: var(--text-sm); gap: 7px; justify-content: center; min-height: 88px; padding: 16px; }
