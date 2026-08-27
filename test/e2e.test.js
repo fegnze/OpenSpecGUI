@@ -644,11 +644,9 @@ test('embedded Initiative App 以独立 WebContentsView 原样运行并保持路
         });
         await page.bringToFront();
         if (windowFocused) {
-            var focusCommand = page.locator('[data-action="focus-initiative-app"]');
-            await focusCommand.click();
+            assert.equal(await page.locator('[data-action="focus-initiative-app"]').count(), 0);
+            await page.keyboard.press('F6');
             await waitForEmbedded(function (value) { return value.focused; });
-            assert.equal(await focusCommand.getAttribute('aria-pressed'), 'true');
-            assert.match(await focusCommand.textContent(), /专项内容已聚焦/);
             await electronApp.evaluate(function (electron) {
                 var child = electron.webContents.getAllWebContents().find(function (contents) {
                     return contents.getURL().startsWith('openspec-initiative-app://');
@@ -657,10 +655,10 @@ test('embedded Initiative App 以独立 WebContentsView 原样运行并保持路
                 child.sendInputEvent({ type: 'keyUp', keyCode: 'F6' });
             });
             await page.waitForFunction(function () {
-                return document.activeElement && document.activeElement.getAttribute('data-action') === 'focus-initiative-app';
+                return document.activeElement && document.activeElement.matches('.back-button[data-route="initiatives"]');
             });
-            assert.equal(await focusCommand.getAttribute('aria-pressed'), 'false');
-            assert.match(await focusCommand.textContent(), /进入专项内容/);
+            await page.keyboard.press('F6');
+            await waitForEmbedded(function (value) { return value.focused; });
         } else {
             context.diagnostic('macOS 未授予测试窗口前台焦点，跳过 OS focus/F6 往返检查');
         }

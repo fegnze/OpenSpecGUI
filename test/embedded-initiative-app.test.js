@@ -624,14 +624,8 @@ test('WebContentsView 宿主使用隔离 session、固定安全配置、精确�
     assert.deepEqual(harness.host.focus(mounted.instanceId), { applied: true });
     assert.equal(harness.window.focused, true);
     assert.equal(view.webContents.focused, true);
-    assert.ok(harness.sent.some(function (event) {
-        return event.payload.type === 'focus' && event.payload.focused === true;
-    }));
     view.webContents.focused = false;
     view.webContents.emit('blur');
-    assert.ok(harness.sent.some(function (event) {
-        return event.payload.type === 'focus' && event.payload.focused === false;
-    }));
     var keyPrevented = false;
     view.webContents.emit('before-input-event', { preventDefault: function () { keyPrevented = true; } }, {
         type: 'keyDown', key: 'F6', alt: false, control: false, meta: false, shift: false

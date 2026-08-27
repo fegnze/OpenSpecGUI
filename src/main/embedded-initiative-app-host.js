@@ -133,12 +133,6 @@ EmbeddedInitiativeAppHost.prototype.bindViewEvents = function (instance) {
     });
     webContents.on('did-navigate', function (event, destination) { reportLocation(destination); });
     webContents.on('did-navigate-in-page', function (event, destination) { reportLocation(destination); });
-    webContents.on('focus', function () {
-        self.send(instance, 'focus', { focused: true });
-    });
-    webContents.on('blur', function () {
-        self.send(instance, 'focus', { focused: false });
-    });
     webContents.on('before-input-event', function (event, input) {
         var window;
         if (!input || input.type !== 'keyDown' || input.key !== 'F6' || input.alt || input.control || input.meta || input.shift) {
