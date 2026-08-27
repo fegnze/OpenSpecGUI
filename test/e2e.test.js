@@ -296,6 +296,17 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         await uiHelpers.assertNoPageOverflow(page, 'Initiative 列表');
         await uiHelpers.assertTextFits(page, ['.initiative-row-copy strong', '.initiative-row-copy p', '.initiative-diagnostics li'], 'Initiative 列表');
         await uiHelpers.assertReachable(page, ['[data-route="overview"]', '.initiative-row', '[data-change-scope="independent"]'], 'Initiative 列表');
+        var initiativeTypography = await page.locator('.initiative-row').first().evaluate(function (row) {
+            return {
+                title: Number.parseFloat(getComputedStyle(row.querySelector('.initiative-row-copy strong')).fontSize),
+                summary: Number.parseFloat(getComputedStyle(row.querySelector('.initiative-row-copy p')).fontSize),
+                metadata: Number.parseFloat(getComputedStyle(row.querySelector('.initiative-row-copy small')).fontSize),
+                metadataItems: row.querySelectorAll('.initiative-row-copy small > span').length
+            };
+        });
+        assert.ok(initiativeTypography.title > initiativeTypography.summary);
+        assert.ok(initiativeTypography.summary > initiativeTypography.metadata);
+        assert.equal(initiativeTypography.metadataItems, 3);
 
         await page.locator('.initiative-row[data-provider-id="openspec-generic-initiative-v1"]').focus();
         await page.keyboard.press('Enter');

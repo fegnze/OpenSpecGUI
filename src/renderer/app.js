@@ -426,9 +426,12 @@
 
     function initiativeCard(item) {
         var scope = item.presentation.mode === 'embedded-app'
-            ? escapeHtml(item.collection + ' · 独立应用')
-            : escapeHtml(item.changeRefs.length + ' Changes · ' + item.artifacts.length + ' 成果');
-        return '<button class="initiative-row" type="button" data-provider-id="' + escapeHtml(item.providerId) + '" data-initiative-id="' + escapeHtml(item.id) + '"><span class="initiative-row-mark is-' + escapeHtml(item.health) + '">' + icon(initiativeHealthIcon(item.health), 17) + '</span><span class="initiative-row-copy"><span><strong>' + escapeHtml(item.title) + '</strong><em>' + escapeHtml(initiativeStatusLabel(item.status)) + '</em></span><p>' + escapeHtml(item.summary || item.goal || '暂无摘要') + '</p><small>' + escapeHtml(item.id) + ' · ' + scope + '</small></span><span class="initiative-row-health"><span>' + escapeHtml(initiativeHealthLabel(item.health)) + '</span><small>' + escapeHtml(item.presentation.mode === 'embedded-app' ? '独立应用' : '通用视图') + '</small></span>' + icon('chevron-right', 17) + '</button>';
+            ? [item.collection, '独立应用']
+            : [item.changeRefs.length + ' Changes', item.artifacts.length + ' 成果'];
+        var metadata = [item.id].concat(scope).map(function (value) {
+            return '<span>' + escapeHtml(value) + '</span>';
+        }).join('');
+        return '<button class="initiative-row" type="button" data-provider-id="' + escapeHtml(item.providerId) + '" data-initiative-id="' + escapeHtml(item.id) + '"><span class="initiative-row-mark is-' + escapeHtml(item.health) + '">' + icon(initiativeHealthIcon(item.health), 18) + '</span><span class="initiative-row-copy"><span><strong>' + escapeHtml(item.title) + '</strong><em>' + escapeHtml(initiativeStatusLabel(item.status)) + '</em></span><p>' + escapeHtml(item.summary || item.goal || '暂无摘要') + '</p><small>' + metadata + '</small></span><span class="initiative-row-health"><span>' + escapeHtml(initiativeHealthLabel(item.health)) + '</span><small>' + escapeHtml(item.presentation.mode === 'embedded-app' ? '独立应用' : '通用视图') + '</small></span>' + icon('chevron-right', 18) + '</button>';
     }
 
     function renderInitiatives() {
