@@ -7,6 +7,9 @@ var ProjectRegistry = require('./project-registry').ProjectRegistry;
 var WorkbenchService = require('./workbench-service').WorkbenchService;
 var createDefaultInitiativeRegistry = require('../core/initiative-providers').createDefaultInitiativeRegistry;
 var registerIpc = require('./ipc').registerIpc;
+var EmbeddedInitiativeAppHost = require('./embedded-initiative-app-host').EmbeddedInitiativeAppHost;
+var EmbeddedInitiativeAppProtocol = require('./embedded-initiative-app-protocol').EmbeddedInitiativeAppProtocol;
+var INITIATIVE_APP_SCHEME = require('./embedded-initiative-app-protocol').SCHEME;
 
 var app = electron.app;
 var BrowserWindow = electron.BrowserWindow;
@@ -19,6 +22,7 @@ var shell = electron.shell;
 var appIconPath = path.resolve(__dirname, '..', '..', 'assets', 'app-icon.png');
 var mainWindow = null;
 var service = null;
+var embeddedAppHost = null;
 
 if (process.env.OPENSPEC_GUI_USER_DATA) {
     app.setPath('userData', path.resolve(process.env.OPENSPEC_GUI_USER_DATA));
@@ -27,6 +31,9 @@ if (process.env.OPENSPEC_GUI_USER_DATA) {
 protocol.registerSchemesAsPrivileged([{
     scheme: 'app',
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true }
+}, {
+    scheme: INITIATIVE_APP_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true }
 }]);
 
 function isWithin(rootPath, targetPath) {
@@ -82,10 +89,8 @@ function createWindow() {
         }
     });
     mainWindow.once('ready-to-show', function () { mainWindow.show(); });
-    mainWindow.on('focus', async function () {
-        if (service && await service.refreshIfChanged()) {
-            mainWindow.webContents.send('workspace:changed');
-        }
+    mainWindow.on('close', function () {
+        if (embeddedAppHost) { embeddedAppHost.dispose(); }
     });
     mainWindow.on('closed', function () { mainWindow = null; });
     mainWindow.loadURL('app://renderer/index.html');
@@ -114,20 +119,28 @@ if (!app.requestSingleInstanceLock()) {
         var registry = new ProjectRegistry(path.join(app.getPath('userData'), 'projects.json'));
         service = new WorkbenchService(registry, {
             now: process.env.OPENSPEC_GUI_TEST_NOW || '',
-            initiativeRegistry: createDefaultInitiativeRegistry({
-                includeTrustedFixtureProvider: process.env.OPENSPEC_GUI_TEST_TRUSTED_APP === '1'
-            }),
+            initiativeRegistry: createDefaultInitiativeRegistry(),
             cliOptions: {
                 command: process.env.OPENSPEC_GUI_CLI || '',
                 bundledCommand: process.resourcesPath ? path.join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'openspec.cmd' : 'openspec') : ''
             }
         });
         await service.initialize();
+        var embeddedProtocol = new EmbeddedInitiativeAppProtocol({ service: service, shell: shell });
+        embeddedAppHost = new EmbeddedInitiativeAppHost({
+            WebContentsView: electron.WebContentsView,
+            session: electron.session,
+            service: service,
+            protocol: embeddedProtocol,
+            windowProvider: function () { return mainWindow; }
+        });
+        service.options.onInvalidate = function () { embeddedAppHost.dispose(); };
         registerIpc({
             ipcMain: ipcMain,
             dialog: dialog,
             clipboard: clipboard,
             service: service,
+            embeddedAppHost: embeddedAppHost,
             windowProvider: function () { return mainWindow; }
         });
         createWindow();

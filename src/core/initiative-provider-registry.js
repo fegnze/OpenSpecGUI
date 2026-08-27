@@ -228,6 +228,16 @@ InitiativeProviderRegistry.prototype.readArtifact = function (context, descripto
     return provider.readArtifact(context, descriptor, request);
 };
 
+InitiativeProviderRegistry.prototype.prepareApp = function (context, descriptor) {
+    var provider = this.get(descriptor.providerId);
+    if (!provider || typeof provider.prepareApp !== 'function') {
+        var error = new Error('Initiative Provider 不支持独立应用');
+        error.code = 'EMBEDDED_APP_UNAVAILABLE';
+        return Promise.reject(error);
+    }
+    return provider.prepareApp(context, descriptor);
+};
+
 module.exports = {
     InitiativeProviderRegistry: InitiativeProviderRegistry
 };

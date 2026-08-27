@@ -3,11 +3,11 @@
 
     var bridge = window.openSpecGUI;
     var hostRouter = window.OpenSpecHostRouter;
-    var initiativeAppRegistry = new window.OpenSpecInitiativeApps.InitiativeAppRegistry(window.OpenSpecTrustedInitiativeApps || []);
     var currentInitiativeAppHost = null;
     var currentInitiativeAppKey = '';
     var initiativeAppOperation = 0;
     var page = document.getElementById('page');
+    var workspaceElement = document.querySelector('.workspace');
     var sidebarStatus = document.getElementById('sidebar-status');
     var searchInput = document.getElementById('global-search');
     var refreshButton = document.getElementById('refresh-button');
@@ -250,7 +250,10 @@
     }
 
     function setInitiative(providerId, initiativeId, artifactId) {
-        var nextKey = providerId + ':' + initiativeId;
+        var nextDescriptor = state.snapshot && state.snapshot.initiatives.find(function (item) {
+            return item.providerId === providerId && item.id === initiativeId;
+        });
+        var nextKey = nextDescriptor && nextDescriptor.presentation.mode === 'embedded-app' ? embeddedAppKey(nextDescriptor) : providerId + ':' + initiativeId;
         if (currentInitiativeAppHost && currentInitiativeAppKey !== nextKey) {
             disposeInitiativeApp(false);
         }
@@ -279,6 +282,8 @@
     }
 
     function renderLoading() {
+        workspaceElement.classList.remove('has-embedded-app');
+        page.classList.remove('is-embedded-app');
         page.innerHTML = '<div class="loading-state" aria-label="正在载入"><span></span><span></span><span></span></div>';
     }
 
@@ -420,7 +425,10 @@
     }
 
     function initiativeCard(item) {
-        return '<button class="initiative-row" type="button" data-provider-id="' + escapeHtml(item.providerId) + '" data-initiative-id="' + escapeHtml(item.id) + '"><span class="initiative-row-mark is-' + escapeHtml(item.health) + '">' + icon(initiativeHealthIcon(item.health), 17) + '</span><span class="initiative-row-copy"><span><strong>' + escapeHtml(item.title) + '</strong><em>' + escapeHtml(initiativeStatusLabel(item.status)) + '</em></span><p>' + escapeHtml(item.summary || item.goal || '暂无摘要') + '</p><small>' + escapeHtml(item.id) + ' · ' + item.changeRefs.length + ' Changes · ' + item.artifacts.length + ' 成果</small></span><span class="initiative-row-health"><span>' + escapeHtml(initiativeHealthLabel(item.health)) + '</span><small>' + escapeHtml(item.presentation.mode === 'custom' ? '专用视图' : '通用视图') + '</small></span>' + icon('chevron-right', 17) + '</button>';
+        var scope = item.presentation.mode === 'embedded-app'
+            ? escapeHtml(item.collection + ' · 独立应用')
+            : escapeHtml(item.changeRefs.length + ' Changes · ' + item.artifacts.length + ' 成果');
+        return '<button class="initiative-row" type="button" data-provider-id="' + escapeHtml(item.providerId) + '" data-initiative-id="' + escapeHtml(item.id) + '"><span class="initiative-row-mark is-' + escapeHtml(item.health) + '">' + icon(initiativeHealthIcon(item.health), 17) + '</span><span class="initiative-row-copy"><span><strong>' + escapeHtml(item.title) + '</strong><em>' + escapeHtml(initiativeStatusLabel(item.status)) + '</em></span><p>' + escapeHtml(item.summary || item.goal || '暂无摘要') + '</p><small>' + escapeHtml(item.id) + ' · ' + scope + '</small></span><span class="initiative-row-health"><span>' + escapeHtml(initiativeHealthLabel(item.health)) + '</span><small>' + escapeHtml(item.presentation.mode === 'embedded-app' ? '独立应用' : '通用视图') + '</small></span>' + icon('chevron-right', 17) + '</button>';
     }
 
     function renderInitiatives() {
@@ -536,27 +544,24 @@
         }
     }
 
-    function initiativeAppContext(descriptor) {
-        return Object.freeze({
-            projectId: state.projectId,
-            revision: state.revision,
-            providerId: descriptor.providerId,
-            initiativeId: descriptor.id,
-            descriptor: descriptor,
-            route: state.appRoute || 'overview',
-            theme: document.documentElement.getAttribute('data-resolved-theme') || 'light'
-        });
-    }
-
     function disposeInitiativeApp(restoreFocus) {
         var host = currentInitiativeAppHost;
         currentInitiativeAppHost = null;
         currentInitiativeAppKey = '';
         initiativeAppOperation += 1;
         if (!host) { return Promise.resolve(); }
-        return Promise.resolve(host.dispose(restoreFocus)).catch(function () {
+        return Promise.resolve(host.dispose()).then(function () {
+            if (restoreFocus) {
+                var returnFocus = document.querySelector('.primary-nav [data-route="initiatives"]');
+                if (returnFocus) { returnFocus.focus(); }
+            }
+        }).catch(function () {
             showToast('专用 Initiative App 清理失败');
         });
+    }
+
+    function embeddedAppKey(descriptor) {
+        return descriptor.providerId + ':' + descriptor.id + ':' + state.revision + ':' + descriptor.sourceHash;
     }
 
     async function renderInitiativeAppError(host, container, descriptor, error) {
@@ -571,69 +576,42 @@
         refreshIcons();
     }
 
-    function initiativeAppApi(descriptor) {
-        return {
-            setRoute: function (route) {
-                if (typeof route !== 'string' || !/^[a-z0-9][a-z0-9/_-]{0,319}$/.test(route)) {
-                    return Promise.reject(new Error('Initiative App 子路由无效'));
-                }
-                var host = currentInitiativeAppHost;
-                var container = host && host.root;
-                if (!host || currentInitiativeAppKey !== descriptor.providerId + ':' + descriptor.id) {
-                    return Promise.resolve(false);
-                }
-                state.appRoute = route === 'overview' ? '' : route;
-                syncUrl(false);
-                return host.update(initiativeAppContext(descriptor)).catch(function (error) {
-                    return renderInitiativeAppError(host, container, descriptor, error).then(function () { return false; });
-                });
-            },
-            load: function () {
-                return bridge.initiatives.load({
-                    projectId: state.projectId,
-                    revision: state.revision,
-                    providerId: descriptor.providerId,
-                    initiativeId: descriptor.id
-                });
-            },
-            readArtifact: function (sourceHash, artifactId) {
-                return bridge.initiatives.readArtifact({
-                    projectId: state.projectId,
-                    revision: state.revision,
-                    providerId: descriptor.providerId,
-                    initiativeId: descriptor.id,
-                    sourceHash: sourceHash,
-                    artifactId: artifactId
-                });
-            }
-        };
-    }
-
-    function renderCustomInitiative(descriptor) {
-        var app = initiativeAppRegistry.get(descriptor.presentation.appId);
-        if (!app) {
-            page.innerHTML = '<button class="back-button" type="button" data-route="initiatives">' + icon('arrow-left', 16) + '返回专项</button><section class="error-state initiative-custom-error">' + icon('blocks', 25) + '<h2>专用 Initiative App 不可用</h2><p>当前应用未安装 ' + escapeHtml(descriptor.presentation.appId) + '，且不会执行项目中的脚本或 HTML 尝试加载。</p><button class="secondary-command" type="button" data-route="initiatives">' + icon('undo-2', 16) + '返回通用专项列表</button></section>';
-            refreshIcons();
-            return;
-        }
-        var appKey = descriptor.providerId + ':' + descriptor.id;
+    function renderEmbeddedInitiative(descriptor) {
+        var appKey = embeddedAppKey(descriptor);
         if (currentInitiativeAppHost && currentInitiativeAppKey === appKey && currentInitiativeAppHost.root.isConnected) {
-            var currentHost = currentInitiativeAppHost;
-            currentHost.update(initiativeAppContext(descriptor)).catch(function (error) {
-                renderInitiativeAppError(currentHost, currentHost.root, descriptor, error);
-            });
+            currentInitiativeAppHost.setVisible(true);
             return;
         }
-        page.innerHTML = '<button class="back-button" type="button" data-route="initiatives">' + icon('arrow-left', 16) + '返回专项</button><section class="initiative-app-shell"><div class="initiative-app-boundary" id="initiative-app-boundary"><div class="loading-state is-compact" role="status" aria-live="polite" aria-label="正在载入专用 Initiative App"><span></span><span></span></div></div></section>';
+        page.innerHTML = '<section class="initiative-app-host-shell"><header><button class="back-button" type="button" data-route="initiatives">' + icon('arrow-left', 16) + '返回专项</button><span>' + escapeHtml(descriptor.title) + '</span><button class="secondary-command initiative-app-focus-command" type="button" data-action="focus-initiative-app">' + icon('panel-top-open', 16) + '进入专项内容</button></header><div class="initiative-app-boundary" id="initiative-app-boundary"><div class="loading-state is-compact" role="status" aria-live="polite" aria-label="正在载入独立 Initiative App"><span></span><span></span></div></div></section>';
         refreshIcons();
         var container = document.getElementById('initiative-app-boundary');
-        var host = new window.OpenSpecInitiativeApps.InitiativeAppHost(container, initiativeAppRegistry, initiativeAppApi(descriptor));
+        var host = new window.OpenSpecInitiativeApps.EmbeddedInitiativeAppHost(container, bridge.initiativeApp, {
+            onLocation: function (location) {
+                if (currentInitiativeAppHost !== host || state.view !== 'initiative') { return; }
+                state.appRoute = location || '';
+                syncUrl(true);
+            },
+            onError: function (error) {
+                renderInitiativeAppError(host, container, descriptor, error);
+            },
+            onReturnFocus: function () {
+                var command = page.querySelector('[data-action="focus-initiative-app"]');
+                if (command) { command.focus(); }
+            }
+        });
         var operation = initiativeAppOperation + 1;
         initiativeAppOperation = operation;
         currentInitiativeAppHost = host;
         currentInitiativeAppKey = appKey;
-        var returnFocus = document.querySelector('.primary-nav [data-route="initiatives"]');
-        host.mount(descriptor.presentation.appId, initiativeAppContext(descriptor), returnFocus).catch(function (error) {
+        host.mount({
+            projectId: state.projectId,
+            revision: state.revision,
+            providerId: descriptor.providerId,
+            initiativeId: descriptor.id,
+            location: state.appRoute || ''
+        }).then(function (mounted) {
+            if (mounted && container.isConnected) { container.replaceChildren(); }
+        }).catch(function (error) {
             if (operation === initiativeAppOperation) {
                 renderInitiativeAppError(host, container, descriptor, error);
             }
@@ -646,11 +624,11 @@
             renderError('Initiative 已不存在', '该专项、Provider 或深链接可能已失效。刷新不会影响官方 Change 索引。');
             return;
         }
-        if (descriptor.presentation.mode !== 'custom' && state.appRoute && state.appRoute !== 'overview') {
+        if (descriptor.presentation.mode !== 'embedded-app' && state.appRoute) {
             renderError('专项页面不存在', '深链接中的专用子路由不受支持。');
             return;
         }
-        if (descriptor.presentation.mode === 'custom') { renderCustomInitiative(descriptor); }
+        if (descriptor.presentation.mode === 'embedded-app') { renderEmbeddedInitiative(descriptor); }
         else { renderGenericInitiative(descriptor); }
     }
 
@@ -859,7 +837,9 @@
     function render() {
         if (!state.snapshot) { renderLoading(); return; }
         var selectedInitiative = state.view === 'initiative' ? findInitiative(state.providerId, state.initiativeId) : null;
-        var expectedAppKey = selectedInitiative && selectedInitiative.presentation.mode === 'custom' ? selectedInitiative.providerId + ':' + selectedInitiative.id : '';
+        var expectedAppKey = selectedInitiative && selectedInitiative.presentation.mode === 'embedded-app' ? embeddedAppKey(selectedInitiative) : '';
+        workspaceElement.classList.toggle('has-embedded-app', Boolean(expectedAppKey));
+        page.classList.toggle('is-embedded-app', Boolean(expectedAppKey));
         if (currentInitiativeAppHost && currentInitiativeAppKey !== expectedAppKey) {
             disposeInitiativeApp(false);
         }
@@ -930,15 +910,7 @@
         document.documentElement.setAttribute('data-resolved-theme', resolved);
         document.getElementById('app-shell').setAttribute('data-theme', theme);
         themeSelect.value = theme;
-        if (currentInitiativeAppHost && state.snapshot) {
-            var descriptor = findInitiative(state.providerId, state.initiativeId);
-            var host = currentInitiativeAppHost;
-            if (descriptor) {
-                host.update(initiativeAppContext(descriptor)).catch(function (error) {
-                    renderInitiativeAppError(host, host.root, descriptor, error);
-                });
-            }
-        }
+        /* 独立 Initiative App 保留自己的主题，不注入宿主样式。 */
     }
 
     async function copyDocumentPath() {
@@ -976,11 +948,13 @@
         projectOptions.hidden = true;
         projectPickerButton.setAttribute('aria-expanded', 'false');
         projectPicker.classList.remove('is-open');
+        if (currentInitiativeAppHost && !projectDialog.open) { currentInitiativeAppHost.setVisible(true); }
         if (returnFocus) { projectPickerButton.focus(); }
     }
 
     function openProjectMenu(preferLast) {
         if (projectPickerButton.disabled) { return; }
+        if (currentInitiativeAppHost) { currentInitiativeAppHost.setVisible(false); }
         projectOptions.hidden = false;
         projectPickerButton.setAttribute('aria-expanded', 'true');
         projectPicker.classList.add('is-open');
@@ -1171,6 +1145,7 @@
             if (action === 'copy-path') { copyDocumentPath(); return; }
             if (action === 'close-initiative-artifact') { state.artifactId = ''; syncUrl(false); renderInitiativeDetail(); return; }
             if (action === 'retry-initiative-app') { state.appRoute = ''; syncUrl(true); renderInitiativeDetail(); return; }
+            if (action === 'focus-initiative-app') { if (currentInitiativeAppHost) { currentInitiativeAppHost.focus(); } return; }
             if (action === 'locate-current-task') {
                 var currentEntity = findEntity(state.entityType, state.entityId);
                 if (currentEntity && currentEntity.nextTask) {
@@ -1238,6 +1213,7 @@
         projectDialogStatus.textContent = '';
         scanResults.hidden = true;
         await refreshRegistry();
+        if (currentInitiativeAppHost) { await currentInitiativeAppHost.setVisible(false); }
         projectDialog.showModal();
         refreshIcons();
     }
@@ -1270,6 +1246,9 @@
     projectDialog.addEventListener('click', function (event) {
         if (event.target === projectDialog) { projectDialog.close(); }
     });
+    projectDialog.addEventListener('close', function () {
+        if (currentInitiativeAppHost) { currentInitiativeAppHost.setVisible(true); }
+    });
     themeSelect.addEventListener('change', function () { localStorage.setItem('openspec-workbench-theme', themeSelect.value); applyTheme(themeSelect.value); });
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { if (themeSelect.value === 'system') { applyTheme('system'); } });
     async function handleRouteChange() {
@@ -1280,6 +1259,7 @@
     window.addEventListener('hashchange', function () { handleRouteChange(); });
     window.addEventListener('focus', checkForWorkspaceUpdates);
     document.addEventListener('visibilitychange', function () {
+        if (currentInitiativeAppHost) { currentInitiativeAppHost.setVisible(!document.hidden && !projectDialog.open && projectOptions.hidden); }
         if (!document.hidden) { checkForWorkspaceUpdates(); }
     });
     window.addEventListener('beforeunload', function () {

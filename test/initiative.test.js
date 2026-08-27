@@ -15,6 +15,7 @@ function fakeDescriptor(providerId, id, refs) {
         schemaVersion: 1,
         id: id,
         providerId: providerId,
+        collection: 'initiatives',
         type: 'test-initiative',
         title: id,
         summary: '',
@@ -22,7 +23,7 @@ function fakeDescriptor(providerId, id, refs) {
         status: 'active',
         health: 'healthy',
         changeRefs: refs || [],
-        presentation: { mode: 'generic', appId: '' },
+        presentation: { mode: 'generic' },
         artifacts: [],
         sourceHash: 'fixture-hash',
         diagnostics: []

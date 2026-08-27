@@ -128,7 +128,7 @@ function uniqueSorted(items, keyBuilder, label) {
 function normalizeDescriptor(value, expectedProviderId) {
     var item = assertPlainObject(value, 'InitiativeDescriptor');
     assertAllowedKeys(item, [
-        'schemaVersion', 'id', 'providerId', 'type', 'title', 'summary', 'goal', 'status', 'health',
+        'schemaVersion', 'id', 'providerId', 'collection', 'type', 'title', 'summary', 'goal', 'status', 'health',
         'changeRefs', 'presentation', 'artifacts', 'sourceHash', 'diagnostics'
     ], 'InitiativeDescriptor');
     if (item.schemaVersion !== DESCRIPTOR_SCHEMA_VERSION) {
@@ -139,12 +139,9 @@ function normalizeDescriptor(value, expectedProviderId) {
         throw new Error('InitiativeDescriptor Provider ID 与注册项不一致');
     }
     var presentation = assertPlainObject(item.presentation, 'presentation');
-    assertAllowedKeys(presentation, ['mode', 'appId'], 'presentation');
-    if (presentation.mode !== 'generic' && presentation.mode !== 'custom') {
-        throw new Error('presentation.mode 必须是 generic 或 custom');
-    }
-    if (presentation.mode === 'custom' && !presentation.appId) {
-        throw new Error('专用 Initiative 必须声明 appId');
+    assertAllowedKeys(presentation, ['mode'], 'presentation');
+    if (presentation.mode !== 'generic' && presentation.mode !== 'embedded-app') {
+        throw new Error('presentation.mode 必须是 generic 或 embedded-app');
     }
     var changeRefs = uniqueSorted((item.changeRefs || []).map(normalizeChangeRef), function (ref) {
         return ref.id + ':' + ref.relationship;
@@ -156,6 +153,7 @@ function normalizeDescriptor(value, expectedProviderId) {
         schemaVersion: DESCRIPTOR_SCHEMA_VERSION,
         id: normalizeIdentifier(item.id, 'Initiative ID'),
         providerId: providerId,
+        collection: normalizeIdentifier(item.collection || 'initiatives', 'Initiative collection'),
         type: normalizeIdentifier(item.type, 'Initiative 类型'),
         title: requireString(item.title, 'Initiative 标题', 180),
         summary: optionalString(item.summary, 'Initiative 摘要', 1200),
@@ -163,10 +161,7 @@ function normalizeDescriptor(value, expectedProviderId) {
         status: requireString(item.status, 'Initiative 状态', 80),
         health: requireString(item.health, 'Initiative health', 80),
         changeRefs: changeRefs,
-        presentation: {
-            mode: presentation.mode,
-            appId: presentation.appId ? normalizeIdentifier(presentation.appId, 'App ID') : ''
-        },
+        presentation: { mode: presentation.mode },
         artifacts: artifacts,
         sourceHash: requireString(item.sourceHash, 'source hash', 128),
         diagnostics: (item.diagnostics || []).map(function (entry) {

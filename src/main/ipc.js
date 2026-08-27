@@ -6,6 +6,7 @@ var PROJECT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 var IDENTIFIER_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 var ARTIFACT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 var SOURCE_HASH_PATTERN = /^[a-f0-9]{64}$/;
+var INSTANCE_ID_PATTERN = /^[a-f0-9]{32}$/;
 
 function assertPayloadSize(request) {
     var serialized;
@@ -88,6 +89,52 @@ function normalizeInitiativeRequest(request, includeArtifact) {
     return normalized;
 }
 
+function normalizeEmbeddedAppRequest(request) {
+    var allowed = ['projectId', 'revision', 'providerId', 'initiativeId', 'location'];
+    var value = requestObject(request, allowed, '独立 Initiative App 请求');
+    var normalized = normalizeInitiativeRequest({
+        projectId: value.projectId,
+        revision: value.revision,
+        providerId: value.providerId,
+        initiativeId: value.initiativeId
+    }, false);
+    normalized.location = value.location ? requireString(value.location, '应用内位置', 2048, /^[^\\\0]+$/) : '';
+    return normalized;
+}
+
+function normalizeInstanceRequest(request, mode) {
+    var allowed = mode === 'bounds' ? ['instanceId', 'bounds', 'visible'] : ['instanceId', 'visible'];
+    var value = requestObject(request, allowed, '独立 Initiative App 实例请求');
+    var normalized = {
+        instanceId: requireString(value.instanceId, '应用实例 ID', 32, INSTANCE_ID_PATTERN)
+    };
+    if (mode === 'bounds') {
+        var bounds = value.bounds && typeof value.bounds === 'object' && !Array.isArray(value.bounds) ? value.bounds : {};
+        assertAllowedKeys(bounds, ['x', 'y', 'width', 'height'], '应用边界');
+        ['x', 'y', 'width', 'height'].forEach(function (key) {
+            if (typeof bounds[key] !== 'number' || !Number.isFinite(bounds[key]) || Math.abs(bounds[key]) > 100000) {
+                throw new Error('应用边界无效');
+            }
+        });
+        normalized.bounds = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+    }
+    if (value.visible !== undefined && typeof value.visible !== 'boolean') {
+        throw new Error('应用可见状态无效');
+    }
+    normalized.visible = value.visible !== false;
+    return normalized;
+}
+
+function normalizeDisposeRequest(request) {
+    var value = requestObject(request, ['instanceId'], '独立 Initiative App 销毁请求');
+    return value.instanceId ? requireString(value.instanceId, '应用实例 ID', 32, INSTANCE_ID_PATTERN) : '';
+}
+
+function normalizeFocusRequest(request) {
+    var value = requestObject(request, ['instanceId'], '独立 Initiative App 聚焦请求');
+    return requireString(value.instanceId, '应用实例 ID', 32, INSTANCE_ID_PATTERN);
+}
+
 function normalizeProjectIdRequest(request) {
     var value = requestObject(request, ['projectId'], '项目请求');
     return requireString(value.projectId, '项目 ID', 36, PROJECT_ID_PATTERN);
@@ -126,6 +173,14 @@ function registerIpc(options) {
     var clipboard = options.clipboard;
     var service = options.service;
     var windowProvider = options.windowProvider;
+    var embeddedAppHost = options.embeddedAppHost;
+
+    function assertTrustedRenderer(event) {
+        var window = windowProvider();
+        if (!window || window.isDestroyed && window.isDestroyed() || !event || event.sender !== window.webContents) {
+            throw new Error('IPC 调用来源无效');
+        }
+    }
 
     ipcMain.handle('projects:list', function () {
         return service.listProjects();
@@ -213,6 +268,33 @@ function registerIpc(options) {
         return service.readInitiativeArtifact(normalizeInitiativeRequest(request, true));
     });
 
+    if (embeddedAppHost) {
+        ipcMain.handle('initiative-app:mount', function (event, request) {
+            assertTrustedRenderer(event);
+            return embeddedAppHost.mount(normalizeEmbeddedAppRequest(request));
+        });
+
+        ipcMain.handle('initiative-app:update-bounds', function (event, request) {
+            assertTrustedRenderer(event);
+            return embeddedAppHost.updateBounds(normalizeInstanceRequest(request, 'bounds'));
+        });
+
+        ipcMain.handle('initiative-app:set-visible', function (event, request) {
+            assertTrustedRenderer(event);
+            return embeddedAppHost.setVisible(normalizeInstanceRequest(request, 'visible'));
+        });
+
+        ipcMain.handle('initiative-app:focus', function (event, request) {
+            assertTrustedRenderer(event);
+            return embeddedAppHost.focus(normalizeFocusRequest(request));
+        });
+
+        ipcMain.handle('initiative-app:dispose', function (event, request) {
+            assertTrustedRenderer(event);
+            return embeddedAppHost.dispose(normalizeDisposeRequest(request));
+        });
+    }
+
     ipcMain.handle('clipboard:write', function (event, request) {
         var value = requestObject(request, ['text'], '剪贴板请求');
         var text = requireString(value.text, '剪贴板文本', 8192);
@@ -225,6 +307,9 @@ module.exports = {
     MAX_IPC_PAYLOAD_BYTES: MAX_IPC_PAYLOAD_BYTES,
     assertPayloadSize: assertPayloadSize,
     normalizeDocumentRequest: normalizeDocumentRequest,
+    normalizeEmbeddedAppRequest: normalizeEmbeddedAppRequest,
+    normalizeFocusRequest: normalizeFocusRequest,
+    normalizeInstanceRequest: normalizeInstanceRequest,
     normalizePaths: normalizePaths,
     normalizeInitiativeRequest: normalizeInitiativeRequest,
     registerIpc: registerIpc,

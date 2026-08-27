@@ -40,7 +40,7 @@
             providerId: safeValue(params, 'provider', 80),
             routeProjectId: safeValue(params, 'project', 160),
             initiativeId: safeValue(params, 'initiative', 80),
-            appRoute: safeValue(params, 'route', 320),
+            appRoute: safeValue(params, 'route', 2048),
             artifactId: safeValue(params, 'artifact', 160)
             , changeScope: params.get('scope') === 'all' ? 'all' : 'independent'
         };

@@ -3,7 +3,6 @@
 var fsPromises = require('node:fs/promises');
 var os = require('node:os');
 var path = require('node:path');
-var resourceProgramFixture = require('./wtc-resource-program-fixture');
 
 var FIXED_NOW = '2026-04-18T09:30:00.000Z';
 var FIXED_MTIME = new Date('2026-04-18T08:15:00.000Z');
@@ -171,32 +170,28 @@ async function createProject(parent, settings) {
         ].join('\n') + '\n', writtenFiles);
         await write(root, 'openspec/initiative-host-fixture.json', '{"enabled":true}\n', writtenFiles);
 
-        await resourceProgramFixture.installProgram({
-            write: function (relativePath, content) {
-                return write(root, relativePath, content, writtenFiles);
+        await write(root, 'openspec/programs/delivery-suite/initiative-app.json', JSON.stringify({
+            $schema: 'https://openspec.dev/schemas/initiative-app-v1.json',
+            schemaVersion: 1,
+            id: 'delivery-suite',
+            kind: 'program',
+            title: '交付专项',
+            summary: '使用独立静态应用提供项目自有界面。',
+            presentation: {
+                type: 'embedded-app',
+                webRoot: 'dashboard',
+                entry: 'index.html',
+                actions: { '/_initiative/open-change': 'openspec.open-change' }
             }
-        }, 'delivery-resource-program', {
-            changeId: 'modern-console'
-        });
-        await write(root, 'openspec/programs/delivery-resource-program/program-orchestration-design.md', [
-            '# Program Design',
-            '',
-            '## 结论',
-            '',
-            '当前契约可以安全加载，并由专用 Initiative App 阅读。',
-            '',
-            '<script>window.__resourceProgramPwned = true</script>',
-            '<a href="javascript:window.__resourceProgramPwned=true">不安全链接</a>',
-            '',
-            '## SAMPLE-FLOW-01 流程',
-            '',
-            '```mermaid',
-            'flowchart LR',
-            '  Proposal[OpenSpec Change] --> Program[Resource Program]',
-            '  Program --> Evidence[验证证据]',
-            '```',
-            ''
-        ].join('\n'), writtenFiles);
+        }, null, 2) + '\n', writtenFiles);
+        await write(root, 'openspec/programs/delivery-suite/dashboard/index.html', [
+            '<!doctype html>',
+            '<html><head><meta charset="utf-8"><title>交付专项</title>',
+            '<style>html,body{height:100%;margin:0}body{background:#101719;color:#eef5f2;font:16px sans-serif;display:grid;place-items:center}main{border-left:3px solid #18a889;padding:24px}a{color:#8eb7ff}</style></head>',
+            '<body><main><h1>交付专项</h1><p>项目自有应用独立运行</p><a href="details.html?view=design#current">查看设计</a></main><script src="vendor/app.js"></script></body></html>'
+        ].join('\n') + '\n', writtenFiles);
+        await write(root, 'openspec/programs/delivery-suite/dashboard/details.html', '<!doctype html><html><body><h1>专项设计详情</h1><a href="index.html">返回</a></body></html>\n', writtenFiles);
+        await write(root, 'openspec/programs/delivery-suite/dashboard/vendor/app.js', 'window.__embeddedInitiativeReady = true;\n', writtenFiles);
     }
 
     await Promise.all(writtenFiles.map(function (filePath) {

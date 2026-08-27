@@ -1,6 +1,6 @@
 ## Context
 
-现有实现位于 `/Users/ghost/work/WorldTourCasino/tools/openspec-workbench`，由 Node HTTP server 提供 `/api/workspace` 与 `/api/document`，浏览器端通过 `fetch` 读取数据。其工作区解析、Markdown 渲染、OpenSpec CLI 适配、任务优先详情和视觉样式可复用，但 server、端口分配和单项目 CLI 入口与独立多项目应用目标冲突。详见 `proposal.md` 与两个能力规范。
+现有单项目原型由 Node HTTP server 提供 `/api/workspace` 与 `/api/document`，浏览器端通过 `fetch` 读取数据。其工作区解析、Markdown 渲染、OpenSpec CLI 适配、任务优先详情和视觉样式可复用，但 server、端口分配和单项目 CLI 入口与独立多项目应用目标冲突。详见 `proposal.md` 与两个能力规范。
 
 新仓库起步为空，需要同时建立桌面进程边界、项目注册表、OpenSpec 读取服务、renderer 和打包流程。被导入项目可能使用不同 OpenSpec 版本，GUI 进程的 `PATH` 也可能不同于终端，因此不能把单一全局 CLI 当作唯一数据源。
 
@@ -17,7 +17,7 @@
 
 - 本次不编辑 proposal、spec、design 或 tasks，也不代替 IDE。
 - 本次不提供团队云同步、远程仓库克隆、账号或协作权限系统。
-- 本次不清理 WorldTourCasino 中的旧实现；只有独立应用完成等价验证后才能另立变更处理。
+- 本次不操作仓库外的任何旧原型；迁移验证只使用本仓库内的中性合成项目。
 - 本次不强制所有被导入项目升级到同一 OpenSpec 版本。
 
 ## Decisions
@@ -62,7 +62,7 @@ IPC 合约限定为：
   "projects": [
     {
       "id": "uuid",
-      "name": "WorldTourCasino",
+      "name": "SampleOpenSpecProject",
       "rootPath": "/absolute/project/path",
       "openspecPath": "/absolute/project/path/openspec",
       "addedAt": "ISO-8601",
@@ -90,9 +90,9 @@ IPC 合约限定为：
 
 ### 6. 迁移 core，替换 transport
 
-从旧实现迁移 `workspace.js`、`markdown.js` 和 `openspec-cli.js` 及其测试，将项目根从进程启动参数改为显式 `projectContext`。原 `/api/workspace` 的结果由 `workspace:load` 返回，原 `/api/document` 由 `documents:read` 返回；renderer 的 `fetch` 调用替换为 `window.openSpecGUI`。
+迁移单项目原型中的 `workspace.js`、`markdown.js` 和 `openspec-cli.js` 及其测试，将项目根从进程启动参数改为显式 `projectContext`。原 `/api/workspace` 的结果由 `workspace:load` 返回，原 `/api/document` 由 `documents:read` 返回；renderer 的 `fetch` 调用替换为 `window.openSpecGUI`。
 
-`server.js` 和 `bin/openspec-workbench.js` 不迁入新运行路径。旧仓库中的源代码暂时保留，作为对照与回滚来源。
+`server.js` 和 `bin/openspec-workbench.js` 不迁入新运行路径。迁移前行为由仓库内合成 fixture 与测试断言固定，不保留外部项目副本。
 
 ### 7. CLI 多级解析并保留文件回退
 
@@ -122,8 +122,8 @@ CLI 不存在、版本不兼容或命令失败时，core 回退到只读文件�
 - [不同 OpenSpec 版本输出不一致] -> CLI 适配层做结构校验，失败时回退文件解析并显示数据来源。
 - [扫描大型目录耗时] -> 限深、排除高成本目录、禁止跟随符号链接，并允许用户取消或只导入单项目。
 - [项目在应用外被移动或卸载] -> 注册项保留失效状态，允许重新关联且不阻塞其他项目。
-- [迁移视觉时引入功能回退] -> 复用旧 renderer 结构和样式，以截图、关键视口和任务进度边界用例做对比。
-- [旧实现与新实现短期重复] -> 在新应用完成等价验证前接受重复，避免提前删除唯一可运行版本。
+- [迁移视觉时引入功能回退] -> 复用原型 renderer 结构和样式，以中性 fixture、关键视口和任务进度边界用例验证。
+- [迁移行为缺少可复现基线] -> 在仓库内固定合成输入和期望输出，不依赖外部项目状态。
 
 ## Migration Plan
 
@@ -132,8 +132,8 @@ CLI 不存在、版本不兼容或命令失败时，core 回退到只读文件�
 3. 实现注册表、导入/扫描/切换/移除/重新关联及 IPC 合约。
 4. 搬迁 renderer 和样式，将 HTTP fetch 替换为 preload API，再加入项目切换与错误状态。
 5. 完成文件边界、Markdown 清洗、CLI 回退、并发切换和注册表故障测试。
-6. 执行 WorldTourCasino 与至少一个其他 OpenSpec 项目的人工验收、桌面/最小窗口截图校验和 macOS 打包验证。
-7. 在新仓库写入恢复提示词，记录原始实现位置、架构决策、当前 change、测试命令和下一步。
-8. 独立应用通过后仍保留旧实现；清理旧代码必须由后续独立 OpenSpec change 决定。
+6. 使用 `sample-alpha` 与 `sample-beta` 两个结构不同的仓库内合成 OpenSpec 项目执行桌面/最小窗口验收和 macOS 打包验证。
+7. 在新仓库写入恢复提示词，记录架构决策、当前 change、测试命令和下一步。
+8. 独立应用通过后移除对单项目原型的迁移依赖；后续变更只以本仓库规范和测试为准。
 
-回滚方式：新应用尚未替代旧入口，出现阻断问题时直接继续使用 WorldTourCasino 中现有 Workbench；注册表位于应用数据目录，删除注册项也不会影响项目文件。
+回滚方式：出现阻断问题时回退到上一可用桌面构建；注册表位于应用数据目录，删除注册项也不会影响项目文件。

@@ -20,6 +20,21 @@ function codedError(code, message) {
     return error;
 }
 
+async function assertPathSegmentsNoSymlink(rootPath, targetPath) {
+    var relative = path.relative(rootPath, targetPath);
+    var segments = relative ? relative.split(path.sep) : [];
+    var current = rootPath;
+    if (!workspaceModule.isWithin(rootPath, targetPath)) {
+        throw codedError('CHANGE_PATH_FORBIDDEN', 'Change 目录超出 OpenSpec 根目录');
+    }
+    for (var index = 0; index < segments.length; index += 1) {
+        current = path.join(current, segments[index]);
+        if ((await fsPromises.lstat(current)).isSymbolicLink()) {
+            throw codedError('CHANGE_PATH_FORBIDDEN', 'Change 目录包含符号链接');
+        }
+    }
+}
+
 async function computeOpenSpecStamp(openspecPath, options) {
     var settings = Object.assign({}, DEFAULT_STAMP_LIMITS, options || {});
     var records = [];
@@ -112,6 +127,7 @@ function WorkbenchService(registry, options) {
     this.revision = 0;
     this.stamp = null;
     this.providerFingerprint = null;
+    this.refreshPromise = null;
 }
 
 WorkbenchService.prototype.initialize = async function () {
@@ -124,6 +140,9 @@ WorkbenchService.prototype.invalidate = function () {
     this.workspace = null;
     this.stamp = null;
     this.providerFingerprint = null;
+    if (typeof this.options.onInvalidate === 'function') {
+        this.options.onInvalidate(this.revision);
+    }
 };
 
 WorkbenchService.prototype.listProjects = function () {
@@ -166,6 +185,8 @@ WorkbenchService.prototype.loadWorkspace = async function (force) {
     if (force) {
         this.invalidate();
     }
+    var expectedProjectId = project.id;
+    var expectedRevision = this.revision;
     if (!this.workspace) {
         var nextWorkspace = await workspaceModule.buildWorkspace({
             id: project.id,
@@ -179,12 +200,16 @@ WorkbenchService.prototype.loadWorkspace = async function (force) {
             now: this.options.now
         });
         var nextStamp = await computeOpenSpecStamp(project.openspecPath, this.options.workspaceStampOptions);
+        var currentProject = this.registry.getActive();
+        if (!currentProject || currentProject.id !== expectedProjectId || this.revision !== expectedRevision) {
+            throw codedError('STALE_WORKSPACE', '工作区构建期间项目已切换或刷新');
+        }
         this.workspace = nextWorkspace;
         this.stamp = nextStamp;
         this.providerFingerprint = nextWorkspace.providerFingerprint;
     }
     return {
-        projectId: project.id,
+        projectId: expectedProjectId,
         revision: this.revision,
         snapshot: this.workspace.snapshot
     };
@@ -243,28 +268,112 @@ WorkbenchService.prototype.readInitiativeArtifact = async function (request) {
     });
 };
 
+WorkbenchService.prototype.prepareEmbeddedInitiativeApp = async function (request) {
+    var descriptor = this.assertCurrentRequest(request);
+    if (!descriptor.presentation || descriptor.presentation.mode !== 'embedded-app') {
+        throw codedError('EMBEDDED_APP_REQUIRED', '该 Initiative 不是独立应用');
+    }
+    return this.initiativeRegistry.prepareApp(this.workspace.roots, descriptor);
+};
+
+WorkbenchService.prototype.resolveChangeDirectory = async function (request) {
+    var active = this.registry.getActive();
+    var workspace = this.workspace;
+    var revision = this.revision;
+    var entity;
+    var target;
+    var realTarget;
+    var stat;
+    if (!active || !workspace) {
+        throw codedError('NO_ACTIVE_PROJECT', '当前没有已载入项目');
+    }
+    if (!request || request.projectId !== active.id || request.revision !== revision) {
+        throw codedError('STALE_WORKSPACE', '工作区已切换或刷新');
+    }
+    var activeMatches = workspace.snapshot.changes.filter(function (change) {
+        return change.id === request.changeId;
+    });
+    var archiveMatches = workspace.snapshot.archives.filter(function (change) {
+        return change.referenceId === request.changeId;
+    });
+    if (activeMatches.length > 1 || archiveMatches.length > 1 || (activeMatches.length && archiveMatches.length)) {
+        throw codedError('CHANGE_INDEX_AMBIGUOUS', 'Change 索引存在歧义');
+    }
+    entity = activeMatches[0];
+    if (entity) {
+        target = path.join(workspace.roots.openspecRealRoot, 'changes', entity.id);
+    } else {
+        entity = archiveMatches[0];
+        if (entity) {
+            target = path.join(workspace.roots.openspecRealRoot, 'changes', 'archive', entity.id);
+        }
+    }
+    if (!entity) {
+        throw codedError('CHANGE_NOT_FOUND', 'Change 不存在或未登记');
+    }
+    await assertPathSegmentsNoSymlink(workspace.roots.openspecRealRoot, target);
+    stat = await fsPromises.lstat(target);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+        throw codedError('CHANGE_PATH_FORBIDDEN', 'Change 目录边界无效');
+    }
+    realTarget = await fsPromises.realpath(target);
+    if (!workspaceModule.isWithin(workspace.roots.openspecRealRoot, realTarget)) {
+        throw codedError('CHANGE_PATH_FORBIDDEN', 'Change 目录超出 OpenSpec 根目录');
+    }
+    var currentActive = this.registry.getActive();
+    if (this.workspace !== workspace || this.revision !== revision || !currentActive || currentActive.id !== active.id) {
+        throw codedError('STALE_WORKSPACE', '工作区已切换或刷新');
+    }
+    return realTarget;
+};
+
 WorkbenchService.prototype.checkForUpdates = async function () {
     var changed = await this.refreshIfChanged();
     return { changed: changed, revision: this.revision };
 };
 
-WorkbenchService.prototype.refreshIfChanged = async function () {
+WorkbenchService.prototype.refreshIfChanged = function () {
+    var self = this;
     var project = this.registry.getActive();
-    if (!project || this.stamp === null) {
-        return false;
+    var workspace = this.workspace;
+    var revision = this.revision;
+    var stamp = this.stamp;
+    var providerFingerprint = this.providerFingerprint;
+    var pending;
+    var shared;
+    if (this.refreshPromise) {
+        return this.refreshPromise;
     }
-    try {
-        var nextStamp = await computeOpenSpecStamp(project.openspecPath, this.options.workspaceStampOptions);
-        var nextProviderFingerprint = await this.initiativeRegistry.fingerprint(this.workspace.roots);
-        if (nextStamp !== this.stamp || nextProviderFingerprint !== this.providerFingerprint) {
-            this.invalidate();
-            return true;
+    if (!project || !workspace || stamp === null) {
+        return Promise.resolve(false);
+    }
+    pending = (async function () {
+        try {
+            var nextStamp = await computeOpenSpecStamp(project.openspecPath, self.options.workspaceStampOptions);
+            var nextProviderFingerprint = await self.initiativeRegistry.fingerprint(workspace.roots);
+            var currentProject = self.registry.getActive();
+            if (self.workspace !== workspace || self.revision !== revision || !currentProject || currentProject.id !== project.id) {
+                return false;
+            }
+            if (nextStamp !== stamp || nextProviderFingerprint !== providerFingerprint) {
+                self.invalidate();
+                return true;
+            }
+        } catch (error) {
+            if (self.workspace === workspace && self.revision === revision) {
+                self.invalidate();
+                return true;
+            }
         }
-    } catch (error) {
-        this.invalidate();
-        return true;
-    }
-    return false;
+        return false;
+    }());
+    shared = pending.finally(function () {
+        if (self.refreshPromise === shared) {
+            self.refreshPromise = null;
+        }
+    });
+    this.refreshPromise = shared;
+    return shared;
 };
 
 module.exports = {

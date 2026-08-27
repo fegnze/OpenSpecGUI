@@ -33,6 +33,18 @@ contextBridge.exposeInMainWorld('openSpecGUI', Object.freeze({
         load: function (request) { return invoke('initiatives:load', request); },
         readArtifact: function (request) { return invoke('initiatives:read-artifact', request); }
     }),
+    initiativeApp: Object.freeze({
+        mount: function (request) { return invoke('initiative-app:mount', request); },
+        updateBounds: function (request) { return invoke('initiative-app:update-bounds', request); },
+        setVisible: function (request) { return invoke('initiative-app:set-visible', request); },
+        focus: function (instanceId) { return invoke('initiative-app:focus', { instanceId: instanceId || '' }); },
+        dispose: function (instanceId) { return invoke('initiative-app:dispose', { instanceId: instanceId || '' }); },
+        onEvent: function (callback) {
+            var listener = function (event, payload) { callback(payload); };
+            ipcRenderer.on('initiative-app:event', listener);
+            return function () { ipcRenderer.removeListener('initiative-app:event', listener); };
+        }
+    }),
     clipboard: Object.freeze({
         write: function (text) { return invoke('clipboard:write', { text: text }); }
     })

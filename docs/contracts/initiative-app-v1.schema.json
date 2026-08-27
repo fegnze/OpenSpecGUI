@@ -1,0 +1,86 @@
+{
+  "$id": "https://openspec.dev/schemas/initiative-app-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "OpenSpec GUI 用于发现项目自有静态 Initiative App 的通用清单。",
+  "properties": {
+    "$schema": {
+      "const": "https://openspec.dev/schemas/initiative-app-v1.json"
+    },
+    "id": {
+      "maxLength": 63,
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "type": "string"
+    },
+    "kind": {
+      "maxLength": 63,
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "type": "string"
+    },
+    "presentation": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "additionalProperties": {
+            "enum": [
+              "openspec.open-change"
+            ],
+            "type": "string"
+          },
+          "maxProperties": 16,
+          "propertyNames": {
+            "maxLength": 256,
+            "pattern": "^/(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[^%\\\\?#\\u0000-\\u0020\\u007f]+$",
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "entry": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*[\\\\%?#\\u0000-\\u001f\\u007f])[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9._-])?$",
+          "type": "string"
+        },
+        "type": {
+          "const": "embedded-app"
+        },
+        "webRoot": {
+          "maxLength": 512,
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*[\\\\%?#\\u0000-\\u001f\\u007f])[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9._-])?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entry",
+        "type",
+        "webRoot"
+      ],
+      "type": "object"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "summary": {
+      "maxLength": 1200,
+      "minLength": 1,
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 180,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "$schema",
+    "id",
+    "kind",
+    "presentation",
+    "schemaVersion",
+    "summary",
+    "title"
+  ],
+  "title": "OpenSpec Initiative App Discovery Manifest",
+  "type": "object"
+}

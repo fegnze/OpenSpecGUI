@@ -234,6 +234,7 @@ function descriptorFromValidated(validated) {
         schemaVersion: contract.DESCRIPTOR_SCHEMA_VERSION,
         id: validated.manifest.id,
         providerId: PROVIDER_ID,
+        collection: 'initiatives',
         type: 'generic-initiative',
         title: validated.manifest.title,
         summary: validated.manifest.summary || '',
@@ -241,7 +242,7 @@ function descriptorFromValidated(validated) {
         status: validated.manifest.status,
         health: validated.manifest.health,
         changeRefs: validated.changeRefs,
-        presentation: { mode: 'generic', appId: '' },
+        presentation: { mode: 'generic' },
         artifacts: validated.artifacts.map(function (artifact) {
             return { id: artifact.id, title: artifact.title, mediaType: artifact.mediaType, size: artifact.size };
         }),

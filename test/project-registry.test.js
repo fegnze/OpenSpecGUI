@@ -46,7 +46,7 @@ test('注册表持久化、真实路径去重且移除不删除项目', async fu
 
 test('加载历史注册记录时使用项目目录原名', async function () {
     var root = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'openspec-gui-legacy-name-'));
-    var projectRoot = await createProject(root, 'world-tour-casino', { productName: 'World Tour Casino' });
+    var projectRoot = await createProject(root, 'sample-project', { productName: 'Sample Project' });
     var registryPath = path.join(root, 'user-data', 'projects.json');
     try {
         var realProjectRoot = await fsPromises.realpath(projectRoot);
@@ -57,7 +57,7 @@ test('加载历史注册记录时使用项目目录原名', async function () {
             activeProjectId: 'legacy-project',
             projects: [{
                 id: 'legacy-project',
-                name: 'World Tour Casino',
+                name: 'Sample Project',
                 rootPath: realProjectRoot,
                 openspecPath: realOpenSpecPath,
                 addedAt: '2026-01-01T00:00:00.000Z',
@@ -67,8 +67,8 @@ test('加载历史注册记录时使用项目目录原名', async function () {
 
         var registry = new ProjectRegistry(registryPath);
         await registry.load();
-        assert.equal(registry.getActive().name, 'world-tour-casino');
-        assert.equal((await registry.list()).projects[0].name, 'world-tour-casino');
+        assert.equal(registry.getActive().name, 'sample-project');
+        assert.equal((await registry.list()).projects[0].name, 'sample-project');
     } finally {
         await fsPromises.rm(root, { recursive: true, force: true });
     }

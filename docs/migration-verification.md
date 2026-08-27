@@ -2,7 +2,7 @@
 
 ## 范围
 
-- 原实现：`/Users/ghost/work/WorldTourCasino/tools/openspec-workbench`
+- 原实现：独立于本仓库的项目内 OpenSpec Workbench
 - 独立应用：`/Users/ghost/work/OpenSpecGUI`
 - OpenSpec change：`build-multi-project-desktop-app`
 
@@ -39,4 +39,4 @@
 
 ## 旧实现保留
 
-WorldTourCasino 中的旧 Workbench 未被修改或删除，可作为迁移对照和临时回滚入口。后续清理必须单独提出、验证并归档，不属于本次 change。
+来源项目中的旧 Workbench 未被本次迁移修改或删除，可作为迁移对照和临时回滚入口。后续清理由来源项目自行管理，不属于本仓库职责。

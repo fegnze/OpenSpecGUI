@@ -54,18 +54,20 @@ test('隐藏标题栏提供拖动区域且不吞掉控件交互', async function
 
 test('Initiative 异步读取状态使用可访问 live status 语义', async function () {
     var renderer = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
-    ['正在读取成果索引', '正在读取成果', '正在载入专用 Initiative App'].forEach(function (label) {
+    ['正在读取成果索引', '正在读取成果', '正在载入独立 Initiative App'].forEach(function (label) {
         var marker = 'role="status" aria-live="polite" aria-label="' + label + '"';
         assert.match(renderer, new RegExp(marker));
     });
 });
 
-test('Resource Program 依赖保持本地且主题变化传递给当前 App', async function () {
+test('embedded App 仅由原生 View bridge 承载且不复制专项依赖', async function () {
     var html = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
     var renderer = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
-    assert.match(html, /src="vendor\/mermaid\.min\.js"/);
-    assert.match(html, /src="resource-program-app\.js"/);
+    var preload = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'preload', 'index.js'), 'utf8');
+    assert.doesNotMatch(html, /mermaid|project-specific-app|trusted-initiative-apps/);
     assert.doesNotMatch(html, /https?:\/\//i);
-    assert.match(renderer, /host\.update\(initiativeAppContext\(descriptor\)\)/);
-    assert.match(renderer, /\{0,319\}/);
+    assert.match(renderer, /EmbeddedInitiativeAppHost/);
+    assert.match(preload, /initiative-app:mount/);
+    assert.match(preload, /initiative-app:focus/);
+    assert.doesNotMatch(preload, /webRoot|absolutePath|command|provider\.call/);
 });

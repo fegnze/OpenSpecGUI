@@ -10,7 +10,7 @@
 - 迁移现有 OpenSpec 解析、提案状态、规范文档与任务展示能力，保持首页聚焦提案状态、提案详情突出 tasks。
 - 通过受限 IPC 暴露文件读取与工作区操作，隔离 Electron 主进程、预加载层和渲染层。
 - 提供 macOS 可运行包和面向后续恢复任务上下文的交接提示词。
-- 保留 WorldTourCasino 中的现有实现，直到独立应用完成等价验证后再另行决定清理。
+- 使用仓库内中性合成项目验证迁移，不依赖任何消费项目的旧实现或真实数据。
 
 ## Capabilities
 
@@ -26,6 +26,6 @@
 ## Impact
 
 - 新增独立仓库 `/Users/ghost/work/OpenSpecGUI`，包含 Electron 主进程、preload、renderer、OpenSpec 读取核心、测试与打包配置。
-- 复用并迁移 `/Users/ghost/work/WorldTourCasino/tools/openspec-workbench` 中的解析器、视图和样式，原有 HTTP server 与 CLI 启动入口不进入新架构。
+- 复用单项目原型中已经验证的解析器、视图和样式，原有 HTTP server 与 CLI 启动入口不进入新架构。
 - 新增 Electron 及其打包工具依赖，并使用应用用户数据目录保存项目注册表。
 - 被导入项目保持只读；应用仅读取其 `openspec` 内容和必要的 Git 元数据。

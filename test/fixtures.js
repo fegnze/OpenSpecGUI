@@ -85,6 +85,31 @@ async function addGenericInitiative(fixture, settings) {
     return initiativeId;
 }
 
+async function addEmbeddedInitiativeApp(fixture, settings) {
+    var config = settings || {};
+    var collection = config.collection || 'programs';
+    var initiativeId = config.id || 'delivery-program';
+    var title = config.title || '交付 Program';
+    var manifest = {
+        $schema: 'https://openspec.dev/schemas/initiative-app-v1.json',
+        schemaVersion: 1,
+        id: initiativeId,
+        kind: config.kind || 'program',
+        title: title,
+        summary: config.summary || '由独立静态应用提供完整专项界面。',
+        presentation: {
+            type: 'embedded-app',
+            webRoot: 'dashboard',
+            entry: 'index.html',
+            actions: config.actions || { '/_initiative/open-change': 'openspec.open-change' }
+        }
+    };
+    await fixture.write('openspec/' + collection + '/' + initiativeId + '/initiative-app.json', JSON.stringify(manifest, null, 2) + '\n');
+    await fixture.write('openspec/' + collection + '/' + initiativeId + '/dashboard/index.html', config.html || '<!doctype html><html><head><meta charset="utf-8"><title>' + title + '</title></head><body><h1>' + title + '</h1><script src="vendor/app.js"></script></body></html>\n');
+    await fixture.write('openspec/' + collection + '/' + initiativeId + '/dashboard/vendor/app.js', 'window.__embeddedInitiativeReady = true;\n');
+    return initiativeId;
+}
+
 function officialStatusProvider() {
     return Promise.resolve({
         source: 'cli',
@@ -108,6 +133,7 @@ function inferredStatusProvider() {
 }
 
 module.exports = {
+    addEmbeddedInitiativeApp: addEmbeddedInitiativeApp,
     addGenericInitiative: addGenericInitiative,
     createFixtureProject: createFixtureProject,
     inferredStatusProvider: inferredStatusProvider,
