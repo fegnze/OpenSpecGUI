@@ -452,8 +452,9 @@ FakeWebContents.prototype.loadURL = function (target) {
     return Promise.resolve();
 };
 FakeWebContents.prototype.close = function () { this.closed = true; };
-FakeWebContents.prototype.focus = function () { this.focused = true; };
+FakeWebContents.prototype.focus = function () { this.focused = true; this.emit('focus'); };
 FakeWebContents.prototype.getURL = function () { return this.url || ''; };
+FakeWebContents.prototype.isFocused = function () { return this.focused; };
 FakeWebContents.prototype.isDestroyed = function () { return this.closed; };
 FakeWebContents.locationTransform = null;
 
@@ -623,6 +624,14 @@ test('WebContentsView 宿主使用隔离 session、固定安全配置、精确�
     assert.deepEqual(harness.host.focus(mounted.instanceId), { applied: true });
     assert.equal(harness.window.focused, true);
     assert.equal(view.webContents.focused, true);
+    assert.ok(harness.sent.some(function (event) {
+        return event.payload.type === 'focus' && event.payload.focused === true;
+    }));
+    view.webContents.focused = false;
+    view.webContents.emit('blur');
+    assert.ok(harness.sent.some(function (event) {
+        return event.payload.type === 'focus' && event.payload.focused === false;
+    }));
     var keyPrevented = false;
     view.webContents.emit('before-input-event', { preventDefault: function () { keyPrevented = true; } }, {
         type: 'keyDown', key: 'F6', alt: false, control: false, meta: false, shift: false

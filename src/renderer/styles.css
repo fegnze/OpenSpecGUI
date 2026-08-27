@@ -1429,6 +1429,8 @@ h1 { font-size: var(--text-page); }
     flex: 0 0 auto;
     margin-left: auto;
 }
+.initiative-app-focus-command .initiative-app-focus-label { color: inherit; }
+.initiative-app-focus-command.is-active { border-color: var(--blue); color: var(--blue); }
 .initiative-app-boundary {
     min-height: 0;
     min-width: 0;

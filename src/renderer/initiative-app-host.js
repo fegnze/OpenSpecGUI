@@ -43,8 +43,13 @@
             if (typeof this.callbacks.onLocation === 'function') {
                 this.callbacks.onLocation(this.location);
             }
+        } else if (event.type === 'focus' && typeof this.callbacks.onFocusChange === 'function') {
+            this.callbacks.onFocusChange(event.focused === true);
         } else if (event.type === 'error' && typeof this.callbacks.onError === 'function') {
             this.visible = false;
+            if (typeof this.callbacks.onFocusChange === 'function') {
+                this.callbacks.onFocusChange(false);
+            }
             this.callbacks.onError(new Error(event.message || '独立 Initiative App 加载失败'));
         } else if (event.type === 'return-focus' && typeof this.callbacks.onReturnFocus === 'function') {
             this.callbacks.onReturnFocus();

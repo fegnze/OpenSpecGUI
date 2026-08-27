@@ -564,6 +564,17 @@
         return descriptor.providerId + ':' + descriptor.id + ':' + state.revision + ':' + descriptor.sourceHash;
     }
 
+    function updateInitiativeAppFocusCommand(focused, enabled) {
+        var command = page.querySelector('[data-action="focus-initiative-app"]');
+        var label;
+        if (!command) { return; }
+        command.disabled = enabled === false;
+        command.setAttribute('aria-pressed', focused ? 'true' : 'false');
+        command.classList.toggle('is-active', focused === true);
+        label = command.querySelector('.initiative-app-focus-label');
+        if (label) { label.textContent = focused ? '专项内容已聚焦' : '进入专项内容'; }
+    }
+
     async function renderInitiativeAppError(host, container, descriptor, error) {
         if (host && currentInitiativeAppHost === host) {
             currentInitiativeAppHost = null;
@@ -582,7 +593,7 @@
             currentInitiativeAppHost.setVisible(true);
             return;
         }
-        page.innerHTML = '<section class="initiative-app-host-shell"><header><button class="back-button" type="button" data-route="initiatives">' + icon('arrow-left', 16) + '返回专项</button><span>' + escapeHtml(descriptor.title) + '</span><button class="secondary-command initiative-app-focus-command" type="button" data-action="focus-initiative-app">' + icon('panel-top-open', 16) + '进入专项内容</button></header><div class="initiative-app-boundary" id="initiative-app-boundary"><div class="loading-state is-compact" role="status" aria-live="polite" aria-label="正在载入独立 Initiative App"><span></span><span></span></div></div></section>';
+        page.innerHTML = '<section class="initiative-app-host-shell"><header><button class="back-button" type="button" data-route="initiatives">' + icon('arrow-left', 16) + '返回专项</button><span>' + escapeHtml(descriptor.title) + '</span><button class="secondary-command initiative-app-focus-command" type="button" data-action="focus-initiative-app" aria-pressed="false" disabled>' + icon('panel-top-open', 16) + '<span class="initiative-app-focus-label">进入专项内容</span></button></header><div class="initiative-app-boundary" id="initiative-app-boundary"><div class="loading-state is-compact" role="status" aria-live="polite" aria-label="正在载入独立 Initiative App"><span></span><span></span></div></div></section>';
         refreshIcons();
         var container = document.getElementById('initiative-app-boundary');
         var host = new window.OpenSpecInitiativeApps.EmbeddedInitiativeAppHost(container, bridge.initiativeApp, {
@@ -594,7 +605,11 @@
             onError: function (error) {
                 renderInitiativeAppError(host, container, descriptor, error);
             },
+            onFocusChange: function (focused) {
+                if (currentInitiativeAppHost === host) { updateInitiativeAppFocusCommand(focused, true); }
+            },
             onReturnFocus: function () {
+                updateInitiativeAppFocusCommand(false, true);
                 var command = page.querySelector('[data-action="focus-initiative-app"]');
                 if (command) { command.focus(); }
             }
@@ -610,7 +625,10 @@
             initiativeId: descriptor.id,
             location: state.appRoute || ''
         }).then(function (mounted) {
-            if (mounted && container.isConnected) { container.replaceChildren(); }
+            if (mounted && container.isConnected) {
+                container.replaceChildren();
+                updateInitiativeAppFocusCommand(false, true);
+            }
         }).catch(function (error) {
             if (operation === initiativeAppOperation) {
                 renderInitiativeAppError(host, container, descriptor, error);
@@ -1145,7 +1163,14 @@
             if (action === 'copy-path') { copyDocumentPath(); return; }
             if (action === 'close-initiative-artifact') { state.artifactId = ''; syncUrl(false); renderInitiativeDetail(); return; }
             if (action === 'retry-initiative-app') { state.appRoute = ''; syncUrl(true); renderInitiativeDetail(); return; }
-            if (action === 'focus-initiative-app') { if (currentInitiativeAppHost) { currentInitiativeAppHost.focus(); } return; }
+            if (action === 'focus-initiative-app') {
+                if (currentInitiativeAppHost) {
+                    currentInitiativeAppHost.focus().then(function (result) {
+                        if (!result || result.applied !== true) { showToast('专项内容暂时无法聚焦'); }
+                    }).catch(function () { showToast('专项内容暂时无法聚焦'); });
+                }
+                return;
+            }
             if (action === 'locate-current-task') {
                 var currentEntity = findEntity(state.entityType, state.entityId);
                 if (currentEntity && currentEntity.nextTask) {
