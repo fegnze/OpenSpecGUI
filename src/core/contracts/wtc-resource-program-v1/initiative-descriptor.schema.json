@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "initiative-descriptor.schema.json",
+  "title": "Resource Program Initiative Descriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "providerId", "initiativeId", "kind", "title", "summary", "summaryStatus", "health", "relatedChangeIds", "presentationMode", "sourceHash"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "providerId": { "const": "wtc-resource-program-v1" },
+    "initiativeId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "minLength": 1, "maxLength": 120 },
+    "kind": { "const": "resource-program" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "summaryStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "authority"],
+      "properties": {
+        "value": { "enum": ["invalid", "blocked", "needs-review", "in-progress", "complete"] },
+        "authority": { "const": "derived" }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "diagnostics"],
+      "properties": {
+        "status": { "enum": ["healthy", "degraded", "invalid"] },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "initiative-diagnostic.schema.json" }
+        }
+      }
+    },
+    "relatedChangeIds": {
+      "type": "array",
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 }
+    },
+    "presentationMode": { "const": "specialized-app" },
+    "sourceHash": { "type": "string", "pattern": "^[a-f0-9]{64}$", "minLength": 64, "maxLength": 64 }
+  }
+}

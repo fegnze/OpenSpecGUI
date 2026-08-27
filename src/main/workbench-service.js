@@ -1,8 +1,18 @@
 'use strict';
 
+var crypto = require('node:crypto');
 var fsPromises = require('node:fs/promises');
 var path = require('node:path');
+var createDefaultInitiativeRegistry = require('../core/initiative-providers').createDefaultInitiativeRegistry;
 var workspaceModule = require('../core/workspace');
+
+var DEFAULT_STAMP_LIMITS = {
+    maxDepth: 32,
+    maxEntries: 20000,
+    maxBytes: 64 * 1024 * 1024
+};
+var WORKSPACE_DIRECTORIES = ['changes', 'specs'];
+var WORKSPACE_ROOT_FILES = ['config.json', 'config.yaml', 'config.yml'];
 
 function codedError(code, message) {
     var error = new Error(message);
@@ -10,36 +20,98 @@ function codedError(code, message) {
     return error;
 }
 
-async function computeOpenSpecStamp(openspecPath) {
-    var newest = 0;
+async function computeOpenSpecStamp(openspecPath, options) {
+    var settings = Object.assign({}, DEFAULT_STAMP_LIMITS, options || {});
+    var records = [];
+    var entryCount = 0;
+    var totalBytes = 0;
 
-    async function visit(directory) {
-        var entries = await fsPromises.readdir(directory, { withFileTypes: true });
+    function assertLimit(value, maximum, label) {
+        if (!Number.isSafeInteger(maximum) || maximum < 1 || value > maximum) {
+            throw codedError('WORKSPACE_STAMP_LIMIT', 'OpenSpec ' + label + '超过刷新扫描限制');
+        }
+    }
+
+    async function recordFile(target, relativePath, stat) {
+        totalBytes += Number(stat.size);
+        assertLimit(totalBytes, settings.maxBytes, '文件总量');
+        var content = await fsPromises.readFile(target);
+        records.push(relativePath + '\0file\0' + stat.size + '\0' + crypto.createHash('sha256').update(content).digest('hex'));
+    }
+
+    async function visit(directory, relativeDirectory, depth) {
+        assertLimit(depth, settings.maxDepth, '目录深度');
+        var handle;
+        var entries = [];
+        try {
+            handle = await fsPromises.opendir(directory);
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                records.push(relativeDirectory + '\0missing');
+                return;
+            }
+            throw error;
+        }
+        try {
+            var nextEntry;
+            while ((nextEntry = await handle.read()) !== null) {
+                entryCount += 1;
+                assertLimit(entryCount, settings.maxEntries, '目录项');
+                entries.push(nextEntry);
+            }
+        } finally {
+            await handle.close();
+        }
+        entries.sort(function (left, right) { return left.name.localeCompare(right.name); });
         for (var index = 0; index < entries.length; index += 1) {
             var entry = entries[index];
+            var relativePath = path.posix.join(relativeDirectory, entry.name);
             var target = path.join(directory, entry.name);
             if (entry.isSymbolicLink()) {
-                continue;
-            }
-            if (entry.isDirectory()) {
-                await visit(target);
-            } else if (entry.isFile() && /\.(md|ya?ml|json)$/i.test(entry.name)) {
-                var stat = await fsPromises.stat(target);
-                newest = Math.max(newest, stat.mtimeMs, stat.size);
+                records.push(relativePath + '\0symlink');
+            } else if (entry.isDirectory()) {
+                records.push(relativePath + '\0directory');
+                await visit(target, relativePath, depth + 1);
+            } else if (entry.isFile() && /\.(?:md|json|ya?ml)$/i.test(entry.name)) {
+                await recordFile(target, relativePath, await fsPromises.stat(target, { bigint: true }));
             }
         }
     }
 
-    await visit(openspecPath);
-    return newest;
+    for (var directoryIndex = 0; directoryIndex < WORKSPACE_DIRECTORIES.length; directoryIndex += 1) {
+        var directoryName = WORKSPACE_DIRECTORIES[directoryIndex];
+        await visit(path.join(openspecPath, directoryName), directoryName, 1);
+    }
+    for (var fileIndex = 0; fileIndex < WORKSPACE_ROOT_FILES.length; fileIndex += 1) {
+        var fileName = WORKSPACE_ROOT_FILES[fileIndex];
+        var filePath = path.join(openspecPath, fileName);
+        try {
+            var stat = await fsPromises.lstat(filePath, { bigint: true });
+            entryCount += 1;
+            assertLimit(entryCount, settings.maxEntries, '目录项');
+            if (stat.isSymbolicLink()) {
+                records.push(fileName + '\0symlink');
+            } else if (stat.isFile()) {
+                await recordFile(filePath, fileName, stat);
+            }
+        } catch (error) {
+            if (error.code !== 'ENOENT') {
+                throw error;
+            }
+            records.push(fileName + '\0missing');
+        }
+    }
+    return crypto.createHash('sha256').update(records.join('\n')).digest('hex');
 }
 
 function WorkbenchService(registry, options) {
     this.registry = registry;
     this.options = options || {};
+    this.initiativeRegistry = this.options.initiativeRegistry || createDefaultInitiativeRegistry();
     this.workspace = null;
     this.revision = 0;
     this.stamp = null;
+    this.providerFingerprint = null;
 }
 
 WorkbenchService.prototype.initialize = async function () {
@@ -51,6 +123,7 @@ WorkbenchService.prototype.invalidate = function () {
     this.revision += 1;
     this.workspace = null;
     this.stamp = null;
+    this.providerFingerprint = null;
 };
 
 WorkbenchService.prototype.listProjects = function () {
@@ -94,7 +167,7 @@ WorkbenchService.prototype.loadWorkspace = async function (force) {
         this.invalidate();
     }
     if (!this.workspace) {
-        this.workspace = await workspaceModule.buildWorkspace({
+        var nextWorkspace = await workspaceModule.buildWorkspace({
             id: project.id,
             name: project.name,
             rootPath: project.rootPath,
@@ -102,9 +175,13 @@ WorkbenchService.prototype.loadWorkspace = async function (force) {
         }, {
             cliOptions: this.options.cliOptions || {},
             statusProvider: this.options.statusProvider,
+            initiativeRegistry: this.initiativeRegistry,
             now: this.options.now
         });
-        this.stamp = await computeOpenSpecStamp(project.openspecPath);
+        var nextStamp = await computeOpenSpecStamp(project.openspecPath, this.options.workspaceStampOptions);
+        this.workspace = nextWorkspace;
+        this.stamp = nextStamp;
+        this.providerFingerprint = nextWorkspace.providerFingerprint;
     }
     return {
         projectId: project.id,
@@ -127,14 +204,59 @@ WorkbenchService.prototype.readDocument = async function (request) {
     return workspaceModule.readWorkspaceDocument(this.workspace, request.documentId);
 };
 
+WorkbenchService.prototype.assertCurrentRequest = function (request) {
+    var active = this.registry.getActive();
+    if (!active || !this.workspace) {
+        throw codedError('NO_ACTIVE_PROJECT', '当前没有已载入项目');
+    }
+    if (!request || request.projectId !== active.id || request.revision !== this.revision) {
+        throw codedError('STALE_WORKSPACE', '工作区已切换或刷新');
+    }
+    if (typeof request.providerId !== 'string' || typeof request.initiativeId !== 'string') {
+        throw codedError('INVALID_INITIATIVE', 'Initiative 标识无效');
+    }
+    var descriptor = this.workspace.snapshot.initiatives.find(function (item) {
+        return item.providerId === request.providerId && item.id === request.initiativeId;
+    });
+    if (!descriptor) {
+        throw codedError('INITIATIVE_NOT_FOUND', 'Initiative 不存在或 Provider 不匹配');
+    }
+    return descriptor;
+};
+
+WorkbenchService.prototype.loadInitiative = async function (request) {
+    var descriptor = this.assertCurrentRequest(request);
+    return this.initiativeRegistry.load(this.workspace.roots, descriptor);
+};
+
+WorkbenchService.prototype.readInitiativeArtifact = async function (request) {
+    var descriptor = this.assertCurrentRequest(request);
+    if (typeof request.sourceHash !== 'string' || request.sourceHash !== descriptor.sourceHash) {
+        throw codedError('STALE_INITIATIVE', 'Initiative 成果版本已变化');
+    }
+    if (typeof request.artifactId !== 'string' || !request.artifactId) {
+        throw codedError('INVALID_ARTIFACT', '成果标识无效');
+    }
+    return this.initiativeRegistry.readArtifact(this.workspace.roots, descriptor, {
+        sourceHash: request.sourceHash,
+        artifactId: request.artifactId
+    });
+};
+
+WorkbenchService.prototype.checkForUpdates = async function () {
+    var changed = await this.refreshIfChanged();
+    return { changed: changed, revision: this.revision };
+};
+
 WorkbenchService.prototype.refreshIfChanged = async function () {
     var project = this.registry.getActive();
     if (!project || this.stamp === null) {
         return false;
     }
     try {
-        var nextStamp = await computeOpenSpecStamp(project.openspecPath);
-        if (nextStamp !== this.stamp) {
+        var nextStamp = await computeOpenSpecStamp(project.openspecPath, this.options.workspaceStampOptions);
+        var nextProviderFingerprint = await this.initiativeRegistry.fingerprint(this.workspace.roots);
+        if (nextStamp !== this.stamp || nextProviderFingerprint !== this.providerFingerprint) {
             this.invalidate();
             return true;
         }

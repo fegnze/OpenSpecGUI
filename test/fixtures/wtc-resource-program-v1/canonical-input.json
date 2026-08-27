@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "providerId": "wtc-resource-program-v1",
+  "documents": {
+    "initiativeProvider": {
+      "$schema": "contracts/initiative-provider.schema.json",
+      "schemaVersion": 1,
+      "providerId": "wtc-resource-program-v1",
+      "initiativeId": "sample-resource-program",
+      "summary": "验证通用 Resource Program Provider 契约"
+    },
+    "program": {
+      "programId": "sample-resource-program",
+      "title": "示例资源 Program",
+      "workstreams": [
+        { "workstreamId": "ws-01-foundation", "name": "基础", "objective": "冻结契约", "document": "workstreams/ws-01-foundation.md" }
+      ],
+      "changes": [
+        { "changeId": "sample-change", "workstreamId": "ws-01-foundation", "kind": "quality", "risk": "high", "resourceSourceAccess": "none", "startRequires": ["gate-contract"], "acceptRequires": ["gate-delivery"] }
+      ],
+      "gates": [
+        { "gateId": "gate-contract", "type": "contract", "title": "契约", "requiredChanges": [], "requiredEvidence": [] },
+        { "gateId": "gate-delivery", "type": "delivery", "title": "交付", "requiredChanges": [], "requiredEvidence": ["evidence/verification.md"] }
+      ],
+      "milestones": [
+        { "milestoneId": "provider-ready", "title": "Provider Ready", "gateId": "gate-delivery" }
+      ]
+    },
+    "state": {
+      "programId": "sample-resource-program",
+      "changes": [
+        { "changeId": "sample-change", "status": "active", "blockerIds": [] }
+      ],
+      "gates": [
+        { "gateId": "gate-contract", "status": "passed", "evidence": [] },
+        { "gateId": "gate-delivery", "status": "pending", "evidence": [] }
+      ],
+      "contractLocks": [],
+      "contractConsumptions": [],
+      "impactReviews": [],
+      "blockers": []
+    },
+    "assignments": {
+      "programId": "sample-resource-program",
+      "assignments": [
+        { "assignmentId": "deliver-sample", "changeId": "sample-change", "taskIds": ["1.1"], "stage": "delivery", "objective": "交付示例", "scope": ["openspec"], "prohibitedActions": [], "risk": "high", "executorRole": "main-agent", "verifierRole": "verification-subagent", "status": "active", "acceptanceChecks": ["契约通过"], "implementationEvidence": [], "verificationEvidence": [], "verdict": null }
+      ]
+    }
+  },
+  "changes": [
+    { "archived": false, "blockerIds": [], "changeId": "sample-change", "kind": "quality", "resourceSourceAccess": "none", "risk": "high", "status": "active", "tasks": { "completed": 1, "total": 2 }, "title": "示例 Change", "workstreamId": "ws-01-foundation" }
+  ],
+  "diagnostics": [],
+  "artifacts": [
+    { "artifactId": "artifact-0123456789abcdef", "assignmentIds": [], "authority": "program-authority", "changeIds": [], "currency": "current", "diagramIds": ["SAMPLE-FLOW-01"], "evidenceTypes": [], "gateIds": [], "kind": "program-design", "lifecycle": "design", "mediaType": "text/markdown", "path": "openspec/programs/sample-resource-program/design.md", "readingSectionIds": ["section-0123456789abcdef"], "scope": "program", "scopeId": "sample-resource-program", "summary": "示例设计结论", "title": "示例设计", "topics": ["program-governance"], "workstreamIds": [] }
+  ],
+  "catalog": {
+    "diagrams": [
+      { "artifactId": "artifact-0123456789abcdef", "diagramId": "SAMPLE-FLOW-01", "renderable": true, "sourceHeading": "流程", "sourceIndex": 1, "standing": "program-orchestration", "type": "flowchart" }
+    ],
+    "readingSections": [
+      { "artifactId": "artifact-0123456789abcdef", "artifactTitle": "示例设计", "assignmentIds": [], "authority": "program-authority", "changeIds": [], "currency": "current", "evidenceTypes": [], "gateIds": [], "heading": "结论", "headingLevel": 2, "lifecycle": "design", "path": "openspec/programs/sample-resource-program/design.md", "priority": "primary", "relatedStatuses": [], "role": "conclusion", "scope": "program", "scopeId": "sample-resource-program", "sectionId": "section-0123456789abcdef", "sourceIndex": 1, "summary": "示例设计结论", "topics": ["program-governance"], "workstreamIds": [] }
+    ],
+    "topics": [
+      { "topicId": "program-governance", "name": "Program 治理", "description": "Program 契约、编排与门禁" }
+    ]
+  },
+  "sourceRecords": [
+    { "path": "openspec/programs/sample-resource-program/initiative-provider.json", "content": "provider-v1" },
+    { "path": "openspec/programs/sample-resource-program/program.json", "content": "program-v1" },
+    { "path": "openspec/programs/sample-resource-program/contracts/program.schema.json", "content": "program-schema-v1" },
+    { "path": "openspec/programs/sample-resource-program/contracts/program-state.schema.json", "content": "program-state-schema-v1" },
+    { "path": "openspec/programs/sample-resource-program/contracts/assignments.schema.json", "content": "assignments-schema-v1" },
+    { "path": "openspec/programs/sample-resource-program/contracts/artifact-taxonomy.schema.json", "content": "artifact-taxonomy-schema-v1" },
+    { "path": "openspec/programs/sample-resource-program/design.md", "content": "# 示例设计\n\n## 结论\n\n示例设计结论。" }
+  ]
+}

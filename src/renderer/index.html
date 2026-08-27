@@ -7,9 +7,15 @@
     <meta name="description" content="多项目 OpenSpec 本地执行工作台">
     <title>OpenSpec GUI</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="resource-program-app.css">
     <script defer src="vendor/marked.umd.js"></script>
+    <script defer src="vendor/mermaid.min.js"></script>
     <script defer src="vendor/lucide.min.js"></script>
     <script defer src="progress.js"></script>
+    <script defer src="host-router.js"></script>
+    <script defer src="initiative-app-host.js"></script>
+    <script defer src="resource-program-app.js"></script>
+    <script defer src="trusted-initiative-apps.js"></script>
     <script defer src="app.js"></script>
 </head>
 <body>
@@ -47,6 +53,10 @@
                 <button type="button" data-route="overview" aria-label="执行台" aria-current="page" data-tooltip="执行台">
                     <i data-lucide="gauge" aria-hidden="true"></i>
                     <span>执行台</span>
+                </button>
+                <button type="button" data-route="initiatives" aria-label="专项" data-tooltip="专项">
+                    <i data-lucide="layers-3" aria-hidden="true"></i>
+                    <span>专项</span>
                 </button>
                 <button type="button" data-route="specs" aria-label="规范" data-tooltip="规范">
                     <i data-lucide="book-open-text" aria-hidden="true"></i>

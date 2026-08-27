@@ -1,0 +1,18 @@
+{
+  "artifacts": [
+    { "artifactId": "artifact-0123456789abcdef", "assignmentIds": [], "authority": "program-authority", "changeIds": [], "currency": "current", "diagramIds": ["SAMPLE-FLOW-01"], "evidenceTypes": [], "gateIds": [], "kind": "program-design", "lifecycle": "design", "mediaType": "text/markdown", "path": "openspec/programs/sample-resource-program/design.md", "readingSectionIds": ["section-0123456789abcdef"], "scope": "program", "scopeId": "sample-resource-program", "summary": "示例设计结论", "title": "示例设计", "topics": ["program-governance"], "workstreamIds": [] }
+  ],
+  "diagrams": [
+    { "artifactId": "artifact-0123456789abcdef", "diagramId": "SAMPLE-FLOW-01", "renderable": true, "sourceHeading": "流程", "sourceIndex": 1, "standing": "program-orchestration", "type": "flowchart" }
+  ],
+  "initiativeId": "sample-resource-program",
+  "providerId": "wtc-resource-program-v1",
+  "readingSections": [
+    { "artifactId": "artifact-0123456789abcdef", "artifactTitle": "示例设计", "assignmentIds": [], "authority": "program-authority", "changeIds": [], "currency": "current", "evidenceTypes": [], "gateIds": [], "heading": "结论", "headingLevel": 2, "lifecycle": "design", "path": "openspec/programs/sample-resource-program/design.md", "priority": "primary", "relatedStatuses": [], "role": "conclusion", "scope": "program", "scopeId": "sample-resource-program", "sectionId": "section-0123456789abcdef", "sourceIndex": 1, "summary": "示例设计结论", "topics": ["program-governance"], "workstreamIds": [] }
+  ],
+  "schemaVersion": 1,
+  "sourceHash": "754e6c7b6f3a7434138e4484fa9679d7e0fe61a8cb923dcf3dc311f2d565dc17",
+  "topics": [
+    { "description": "Program 契约、编排与门禁", "name": "Program 治理", "topicId": "program-governance" }
+  ]
+}

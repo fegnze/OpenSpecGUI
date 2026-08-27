@@ -26,13 +26,16 @@ test('扫描后的文档被替换为目录外符号链接时拒绝读取', async
 
 test('renderer 不使用 HTTP transport 或直接 Node 能力', async function () {
     var renderer = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+    var initiativeAppHost = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'renderer', 'initiative-app-host.js'), 'utf8');
     var preload = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'preload', 'index.js'), 'utf8');
     var main = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'main', 'index.js'), 'utf8');
     var html = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
 
     assert.doesNotMatch(renderer, /\bfetch\s*\(/);
     assert.doesNotMatch(renderer, /navigator\.clipboard|require\s*\(/);
+    assert.doesNotMatch(initiativeAppHost, /\bfetch\s*\(|require\s*\(|iframe|webview/);
     assert.match(preload, /contextBridge\.exposeInMainWorld\('openSpecGUI'/);
+    assert.doesNotMatch(preload, /provider\.call|readPath|exec|spawn|environment|network/);
     assert.match(main, /contextIsolation:\s*true/);
     assert.match(main, /sandbox:\s*true/);
     assert.match(main, /nodeIntegration:\s*false/);
@@ -47,4 +50,22 @@ test('隐藏标题栏提供拖动区域且不吞掉控件交互', async function
     assert.match(main, /titleBarStyle:.*hiddenInset/);
     assert.match(styles, /\.sidebar,\s*\.toolbar\s*\{\s*-webkit-app-region:\s*drag;/);
     assert.match(styles, /\.toolbar label\s*\{\s*-webkit-app-region:\s*no-drag;/);
+});
+
+test('Initiative 异步读取状态使用可访问 live status 语义', async function () {
+    var renderer = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+    ['正在读取成果索引', '正在读取成果', '正在载入专用 Initiative App'].forEach(function (label) {
+        var marker = 'role="status" aria-live="polite" aria-label="' + label + '"';
+        assert.match(renderer, new RegExp(marker));
+    });
+});
+
+test('Resource Program 依赖保持本地且主题变化传递给当前 App', async function () {
+    var html = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
+    var renderer = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+    assert.match(html, /src="vendor\/mermaid\.min\.js"/);
+    assert.match(html, /src="resource-program-app\.js"/);
+    assert.doesNotMatch(html, /https?:\/\//i);
+    assert.match(renderer, /host\.update\(initiativeAppContext\(descriptor\)\)/);
+    assert.match(renderer, /\{0,319\}/);
 });

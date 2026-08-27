@@ -49,6 +49,45 @@ test('关键工作台界面视觉基线', async function () {
     await screenshot('overview-wide-dark.png');
     await uiHelpers.setTheme(page, 'light');
 
+    await page.locator('.primary-nav [data-route="initiatives"]').click();
+    await page.waitForSelector('.initiative-list');
+    await screenshot('initiative-list-wide-light.png');
+    await page.locator('.initiative-row[data-provider-id="openspec-generic-initiative-v1"]').click();
+    await page.waitForSelector('.initiative-detail-grid');
+    await page.waitForSelector('[data-initiative-artifact="release-summary"]');
+    await uiHelpers.setTheme(page, 'dark');
+    await screenshot('initiative-detail-wide-dark.png');
+    await uiHelpers.setTheme(page, 'light');
+    await page.setViewportSize({ width: 820, height: 640 });
+    await screenshot('initiative-detail-minimum-light.png');
+    await page.setViewportSize({ width: 1440, height: 930 });
+    await page.locator('.primary-nav [data-route="overview"]').click();
+    await page.waitForSelector('.control-header');
+
+    await page.locator('.primary-nav [data-route="initiatives"]').click();
+    await page.locator('.initiative-row[data-provider-id="wtc-resource-program-v1"]').click();
+    await page.waitForSelector('[data-initiative-app="resource-program-v1"] .resource-program-app');
+    await screenshot('resource-program-overview-wide-light.png');
+    await page.locator('[data-rp-route="artifacts"]').click();
+    await page.locator('[data-rp-lens="conclusions"]').click();
+    await page.locator('.rp-artifact-row').first().click();
+    await page.waitForSelector('.rp-diagram');
+    await page.locator('.rp-diagram').first().scrollIntoViewIfNeeded();
+    await page.waitForSelector('.rp-diagram[data-rp-render-state="rendered"]');
+    await uiHelpers.setTheme(page, 'dark');
+    await page.waitForSelector('.rp-diagram[data-rp-render-state="rendered"]');
+    await screenshot('resource-program-artifact-wide-dark.png');
+    await uiHelpers.setTheme(page, 'light');
+    await page.setViewportSize({ width: 820, height: 640 });
+    await page.waitForSelector('.rp-diagram[data-rp-render-state="rendered"]');
+    await page.locator('.rp-diagram').first().evaluate(function (element) {
+        element.scrollIntoView({ block: 'center' });
+    });
+    await screenshot('resource-program-artifact-minimum-light.png');
+    await page.setViewportSize({ width: 1440, height: 930 });
+    await page.locator('.primary-nav [data-route="overview"]').click();
+    await page.waitForSelector('.control-header');
+
     await page.locator('#project-picker-button').click();
     await page.waitForSelector('#project-options:not([hidden])');
     await screenshot('project-picker-open-light.png');

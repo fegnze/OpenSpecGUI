@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "program.schema.json",
+  "title": "DH 浏览器资源重组 Program",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "programId",
+    "title",
+    "changeLifecycleSource",
+    "workstreams",
+    "changes",
+    "gates",
+    "milestones"
+  ],
+  "properties": {
+    "$schema": { "const": "contracts/program.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "programId": { "const": "dh-browser-progressive-resource-reorganization" },
+    "title": { "type": "string", "minLength": 1 },
+    "changeLifecycleSource": { "const": "openspec" },
+    "workstreams": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workstreamId", "name", "objective", "document"],
+        "properties": {
+          "workstreamId": { "type": "string", "pattern": "^ws-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "name": { "type": "string", "minLength": 1 },
+          "objective": { "type": "string", "minLength": 1 },
+          "document": { "type": "string", "pattern": "^workstreams/[a-z0-9]+(?:-[a-z0-9]+)*\\.md$" }
+        }
+      }
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["changeId", "workstreamId", "kind", "risk", "resourceSourceAccess", "startRequires", "acceptRequires"],
+        "properties": {
+          "changeId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "workstreamId": { "type": "string" },
+          "kind": { "enum": ["contract", "foundation", "vertical-slice", "migration-batch", "quality", "cutover"] },
+          "risk": { "enum": ["low", "medium", "high", "critical"] },
+          "resourceSourceAccess": { "enum": ["none", "read", "modify"] },
+          "startRequires": { "type": "array", "items": { "type": "string" } },
+          "acceptRequires": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["gateId", "type", "title", "requiredChanges", "requiredEvidence"],
+        "properties": {
+          "gateId": { "type": "string", "pattern": "^gate-[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "type": { "enum": ["contract", "delivery", "milestone"] },
+          "title": { "type": "string", "minLength": 1 },
+          "requiredChanges": { "type": "array", "items": { "type": "string" } },
+          "requiredEvidence": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "milestones": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["milestoneId", "title", "gateId"],
+        "properties": {
+          "milestoneId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "title": { "type": "string", "minLength": 1 },
+          "gateId": { "type": "string" }
+        }
+      }
+    }
+  }
+}

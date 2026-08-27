@@ -133,3 +133,25 @@
 #### Scenario: 启动打包应用
 - **WHEN** 用户安装并启动 macOS 构建
 - **THEN** 系统显示项目管理入口并可导入本地 OpenSpec 项目，无需额外启动命令
+
+### Requirement: 项目工作台必须并列承载独立 Change 与 Initiative
+
+系统 SHALL 在同一项目工作台中并列提供独立 OpenSpec Change 与 Initiative 入口。独立 Change 保持现有执行台、规范和归档路径；Initiative 入口展示普通专项与专用专项，且 MUST 与当前项目、主题、刷新和顶层导航共享上下文。
+
+#### Scenario: 从执行台进入 Initiative
+
+- **WHEN** 当前项目包含至少一个有效 Initiative
+- **THEN** 用户可以从顶层导航进入 Initiative 列表并查看专项摘要
+- **AND** 原执行台仍展示全部官方 Change，不因 Initiative 归属而丢失提案
+
+#### Scenario: 从专用 Initiative 返回执行台
+
+- **WHEN** 用户从专用 Initiative App 返回项目执行台
+- **THEN** 宿主恢复原项目上下文和可用焦点位置
+- **AND** 不要求重新启动项目服务或重新导入仓库
+
+#### Scenario: Initiative 状态异常
+
+- **WHEN** Initiative Provider 失败、版本不兼容或专项输入无效
+- **THEN** 顶层工作台仍允许用户浏览独立 Change、规范和归档内容
+- **AND** 专项错误只显示在 Initiative 范围内

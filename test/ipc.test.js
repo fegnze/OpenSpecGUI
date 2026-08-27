@@ -30,21 +30,38 @@ test('IPC 只注册白名单操作并校验项目和文档输入', async functio
         });
 
         assert.deepEqual(Array.from(handlers.keys()).sort(), [
-            'clipboard:write', 'documents:read', 'projects:add', 'projects:list', 'projects:relink',
-            'projects:remove', 'projects:scan', 'projects:select', 'workspace:load', 'workspace:refresh'
+            'clipboard:write', 'documents:read', 'initiatives:load', 'initiatives:read-artifact',
+            'projects:add', 'projects:list', 'projects:relink',
+            'projects:remove', 'projects:scan', 'projects:select', 'workspace:check-updates',
+            'workspace:load', 'workspace:refresh'
         ]);
 
         var addResult = await handlers.get('projects:add')({}, { path: fixture.root });
         assert.equal(addResult.canceled, false);
         var workspace = await handlers.get('workspace:load')({});
         assert.equal(workspace.snapshot.stats.specs, 1);
-        await assert.rejects(function () {
-            return handlers.get('documents:read')({}, {
+        assert.throws(function () {
+            handlers.get('documents:read')({}, {
                 projectId: workspace.projectId,
                 revision: workspace.revision,
                 documentId: '../../outside-secret.md'
             });
-        }, /文档不存在或未登记/);
+        }, /文档 ID 格式无效/);
+
+        assert.throws(function () {
+            handlers.get('projects:select')({}, { projectId: 'x'.repeat(2 * 1024 * 1024) });
+        }, /payload 限制/);
+        assert.throws(function () {
+            handlers.get('initiatives:load')({}, {
+                projectId: workspace.projectId,
+                revision: workspace.revision,
+                providerId: 'Provider_With_Invalid_Format',
+                initiativeId: 'release-readiness'
+            });
+        }, /Provider ID格式无效/);
+        assert.throws(function () {
+            handlers.get('clipboard:write')({}, { text: 'x'.repeat(8193) });
+        }, /剪贴板文本超过限制/);
 
         await handlers.get('clipboard:write')({}, { text: 'openspec/specs/core/spec.md' });
         assert.equal(clipboardValue, 'openspec/specs/core/spec.md');

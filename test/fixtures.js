@@ -57,6 +57,34 @@ async function createFixtureProject() {
     };
 }
 
+async function addGenericInitiative(fixture, settings) {
+    var initiativeId = settings && settings.id ? settings.id : 'launch-readiness';
+    var artifactPath = 'initiatives/' + initiativeId + '/outcomes.md';
+    await fixture.write('openspec/' + artifactPath, '# 交付结论\n\n已完成核心准备。\n');
+    await fixture.write('openspec/initiatives/' + initiativeId + '/initiative.yaml', [
+        'schemaVersion: 1',
+        'id: ' + initiativeId,
+        'title: 发布准备专项',
+        'summary: 统一追踪发布前工作。',
+        'goal: 让所有发布前结论和证据保持可追溯。',
+        'status: active',
+        'health: healthy',
+        'changes:',
+        '  - id: add-feature',
+        '    relationship: owned',
+        '  - id: incomplete-change',
+        '    relationship: related',
+        '  - id: old-change',
+        '    relationship: related',
+        'artifacts:',
+        '  - id: delivery-outcomes',
+        '    title: 交付结论',
+        '    path: ' + artifactPath,
+        ''
+    ].join('\n'));
+    return initiativeId;
+}
+
 function officialStatusProvider() {
     return Promise.resolve({
         source: 'cli',
@@ -80,6 +108,7 @@ function inferredStatusProvider() {
 }
 
 module.exports = {
+    addGenericInitiative: addGenericInitiative,
     createFixtureProject: createFixtureProject,
     inferredStatusProvider: inferredStatusProvider,
     officialStatusProvider: officialStatusProvider

@@ -3,6 +3,7 @@
 var fsPromises = require('node:fs/promises');
 var os = require('node:os');
 var path = require('node:path');
+var resourceProgramFixture = require('./wtc-resource-program-fixture');
 
 var FIXED_NOW = '2026-04-18T09:30:00.000Z';
 var FIXED_MTIME = new Date('2026-04-18T08:15:00.000Z');
@@ -141,6 +142,61 @@ async function createProject(parent, settings) {
 
         await write(root, 'openspec/changes/archive/2026-03-20-project-registry/proposal.md', '# Proposal: 项目注册表\n\n已完成的多项目管理能力。\n', writtenFiles);
         await write(root, 'openspec/changes/archive/2026-03-20-project-registry/tasks.md', '## 1. 交付\n\n- [x] 1.1 完成项目注册表\n', writtenFiles);
+
+        await write(root, 'openspec/initiatives/release-readiness/summary.md', '# 发布结论\n\n核心交付链路已就绪，进入最后验收。\n', writtenFiles);
+        await write(root, 'openspec/initiatives/release-readiness/initiative.yaml', [
+            'schemaVersion: 1',
+            'id: release-readiness',
+            'title: 发布准备专项',
+            'summary: 聚合当前交付、归档和诊断工作。',
+            'goal: 在不改变 OpenSpec Change 生命周期的前提下，建立可追溯的发布准备视图。',
+            'status: active',
+            'health: healthy',
+            'changes:',
+            '  - id: modern-console',
+            '    relationship: owned',
+            '  - id: archive-ready-theme',
+            '    relationship: related',
+            'artifacts:',
+            '  - id: release-summary',
+            '    title: 发布结论',
+            '    path: initiatives/release-readiness/summary.md'
+        ].join('\n') + '\n', writtenFiles);
+        await write(root, 'openspec/initiatives/invalid-contract/initiative.yaml', [
+            'schemaVersion: 99',
+            'id: invalid-contract',
+            'title: 不受支持的专项',
+            'status: active',
+            'health: unknown'
+        ].join('\n') + '\n', writtenFiles);
+        await write(root, 'openspec/initiative-host-fixture.json', '{"enabled":true}\n', writtenFiles);
+
+        await resourceProgramFixture.installProgram({
+            write: function (relativePath, content) {
+                return write(root, relativePath, content, writtenFiles);
+            }
+        }, 'delivery-resource-program', {
+            changeId: 'modern-console'
+        });
+        await write(root, 'openspec/programs/delivery-resource-program/program-orchestration-design.md', [
+            '# Program Design',
+            '',
+            '## 结论',
+            '',
+            '当前契约可以安全加载，并由专用 Initiative App 阅读。',
+            '',
+            '<script>window.__resourceProgramPwned = true</script>',
+            '<a href="javascript:window.__resourceProgramPwned=true">不安全链接</a>',
+            '',
+            '## SAMPLE-FLOW-01 流程',
+            '',
+            '```mermaid',
+            'flowchart LR',
+            '  Proposal[OpenSpec Change] --> Program[Resource Program]',
+            '  Program --> Evidence[验证证据]',
+            '```',
+            ''
+        ].join('\n'), writtenFiles);
     }
 
     await Promise.all(writtenFiles.map(function (filePath) {

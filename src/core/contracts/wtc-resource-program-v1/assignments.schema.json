@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "assignments.schema.json",
+  "title": "Program Agent Assignments",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "programId", "assignments"],
+  "properties": {
+    "$schema": { "const": "contracts/assignments.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "programId": { "const": "dh-browser-progressive-resource-reorganization" },
+    "assignments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["assignmentId", "changeId", "taskIds", "stage", "objective", "scope", "prohibitedActions", "risk", "executorRole", "verifierRole", "status", "acceptanceChecks", "implementationEvidence", "verificationEvidence", "verdict"],
+        "properties": {
+          "assignmentId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "changeId": { "type": "string" },
+          "taskIds": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "stage": { "enum": ["takeover", "cleanup", "delivery"] },
+          "objective": { "type": "string", "minLength": 1 },
+          "scope": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "prohibitedActions": { "type": "array", "items": { "type": "string" } },
+          "risk": { "enum": ["low", "medium", "high", "critical"] },
+          "executorRole": { "enum": ["main-agent", "execution-subagent"] },
+          "verifierRole": { "enum": ["none", "verification-subagent"] },
+          "status": { "enum": ["planned", "active", "awaiting-verification", "accepted", "rework", "blocked"] },
+          "acceptanceChecks": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "implementationEvidence": { "type": "array", "items": { "type": "string" } },
+          "verificationEvidence": { "type": "array", "items": { "type": "string" } },
+          "verdict": { "type": ["string", "null"], "enum": [null, "accepted", "rework"] }
+        }
+      }
+    }
+  }
+}

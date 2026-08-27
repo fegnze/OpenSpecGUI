@@ -1,0 +1,7 @@
+{
+  "$schema": "contracts/initiative-provider.schema.json",
+  "schemaVersion": 1,
+  "providerId": "wtc-resource-program-v1",
+  "initiativeId": "dh-browser-progressive-resource-reorganization",
+  "summary": "以 Workstream、Change、门禁、契约和受治理成果推进 DH 浏览器渐进式资源重组"
+}

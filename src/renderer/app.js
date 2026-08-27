@@ -2,6 +2,11 @@
     'use strict';
 
     var bridge = window.openSpecGUI;
+    var hostRouter = window.OpenSpecHostRouter;
+    var initiativeAppRegistry = new window.OpenSpecInitiativeApps.InitiativeAppRegistry(window.OpenSpecTrustedInitiativeApps || []);
+    var currentInitiativeAppHost = null;
+    var currentInitiativeAppKey = '';
+    var initiativeAppOperation = 0;
     var page = document.getElementById('page');
     var sidebarStatus = document.getElementById('sidebar-status');
     var searchInput = document.getElementById('global-search');
@@ -25,6 +30,7 @@
     var state = {
         registry: { activeProjectId: null, projects: [], diagnostic: null },
         projectId: null,
+        routeProjectId: '',
         revision: 0,
         snapshot: null,
         view: 'overview',
@@ -39,9 +45,17 @@
         statusFilter: 'all',
         currentDocumentRequest: 0,
         currentWorkspaceRequest: 0,
+        currentInitiativeRequest: 0,
+        providerId: '',
+        initiativeId: '',
+        appRoute: '',
+        artifactId: '',
+        changeScope: 'independent',
         scanCandidates: []
     };
     var toastTimer = null;
+    var updateTimer = null;
+    var updateCheckRunning = false;
     var proposalCopyTimers = new WeakMap();
 
     function escapeHtml(value) {
@@ -172,18 +186,7 @@
     }
 
     function serializeState() {
-        var params = new URLSearchParams();
-        params.set('view', state.view);
-        if (state.entityType) { params.set('type', state.entityType); }
-        if (state.entityId) { params.set('id', state.entityId); }
-        if (state.documentId) { params.set('doc', state.documentId); }
-        if (state.detailPanel !== 'tasks') { params.set('panel', state.detailPanel); }
-        if (state.targetTask) { params.set('task', state.targetTask); }
-        if (state.documentMode !== 'rendered') { params.set('mode', state.documentMode); }
-        if (state.query) { params.set('q', state.query); }
-        if (state.typeFilter !== 'all') { params.set('filter', state.typeFilter); }
-        if (state.statusFilter !== 'all') { params.set('status', state.statusFilter); }
-        return params.toString();
+        return hostRouter.serialize(state);
     }
 
     function syncUrl(replace) {
@@ -198,20 +201,11 @@
     }
 
     function readUrl() {
-        var params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-        var requestedView = params.get('view') || 'overview';
-        var legacyChanges = requestedView === 'changes';
-        state.view = legacyChanges ? 'overview' : requestedView;
-        state.entityType = params.get('type') || '';
-        state.entityId = params.get('id') || '';
-        state.documentId = params.get('doc') || '';
-        state.detailPanel = params.get('panel') === 'documents' || state.documentId ? 'documents' : 'tasks';
-        state.targetTask = params.get('task') || '';
-        state.documentMode = params.get('mode') === 'raw' ? 'raw' : 'rendered';
-        state.query = params.get('q') || '';
-        state.typeFilter = params.get('filter') || 'all';
-        state.statusFilter = params.get('status') || 'all';
-        if (legacyChanges) {
+        var route = hostRouter.parse(window.location.hash);
+        Object.keys(route).forEach(function (key) {
+            if (key !== 'legacyChanges') { state[key] = route[key]; }
+        });
+        if (route.legacyChanges) {
             resetOverviewFilters();
             syncUrl(true);
         }
@@ -219,6 +213,8 @@
     }
 
     function setView(view) {
+        disposeInitiativeApp(Boolean(currentInitiativeAppHost));
+        state.currentInitiativeRequest += 1;
         state.view = view;
         state.entityType = '';
         state.entityId = '';
@@ -226,6 +222,10 @@
         state.detailPanel = 'tasks';
         state.targetTask = '';
         state.query = '';
+        state.providerId = '';
+        state.initiativeId = '';
+        state.appRoute = '';
+        state.artifactId = '';
         if (view === 'overview') { resetOverviewFilters(); }
         searchInput.value = '';
         syncUrl(false);
@@ -234,6 +234,8 @@
     }
 
     function setDetail(type, id, documentId, taskId) {
+        disposeInitiativeApp(false);
+        state.currentInitiativeRequest += 1;
         state.view = 'detail';
         state.entityType = type;
         state.entityId = id;
@@ -247,8 +249,28 @@
         if (!state.targetTask) { window.scrollTo(0, 0); }
     }
 
+    function setInitiative(providerId, initiativeId, artifactId) {
+        var nextKey = providerId + ':' + initiativeId;
+        if (currentInitiativeAppHost && currentInitiativeAppKey !== nextKey) {
+            disposeInitiativeApp(false);
+        }
+        state.view = 'initiative';
+        state.providerId = providerId || '';
+        state.initiativeId = initiativeId || '';
+        state.appRoute = '';
+        state.artifactId = artifactId || '';
+        state.entityType = '';
+        state.entityId = '';
+        state.documentId = '';
+        state.query = '';
+        searchInput.value = '';
+        syncUrl(false);
+        render();
+        window.scrollTo(0, 0);
+    }
+
     function updateNavigation() {
-        var activeView = state.view === 'detail' ? routeForCollection(state.entityType) : state.view;
+        var activeView = state.view === 'detail' ? routeForCollection(state.entityType) : (state.view === 'initiative' ? 'initiatives' : state.view);
         if (state.view === 'search') { activeView = ''; }
         document.querySelectorAll('.primary-nav [data-route]').forEach(function (button) {
             if (button.getAttribute('data-route') === activeView) { button.setAttribute('aria-current', 'page'); }
@@ -376,6 +398,260 @@
         body = '<div class="document-list">' + (items.length ? items.map(documentEntityRow).join('') : '<div class="compact-empty">暂无内容</div>') + '</div>';
         page.innerHTML = '<header class="collection-header"><div><h1>' + config.title + '</h1><p>' + config.description + '</p></div><span class="collection-count">' + items.length + ' 项</span></header><section class="collection-body">' + body + '</section>';
         refreshIcons();
+    }
+
+    function initiativeStatusLabel(value) {
+        return { planned: '已计划', active: '进行中', paused: '已暂停', complete: '已完成' }[value] || value || '状态未知';
+    }
+
+    function initiativeHealthLabel(value) {
+        return { healthy: '健康', attention: '需要关注', blocked: '已阻塞', unknown: '未知' }[value] || value || '未知';
+    }
+
+    function initiativeHealthIcon(value) {
+        return { healthy: 'circle-check', attention: 'triangle-alert', blocked: 'circle-x', unknown: 'circle-help' }[value] || 'circle-help';
+    }
+
+    function initiativeDiagnostics(items, compact) {
+        if (!items || !items.length) { return ''; }
+        return '<section class="initiative-diagnostics' + (compact ? ' is-compact' : '') + '" aria-label="Provider 诊断"><header>' + icon('shield-alert', 17) + '<div><h2>受控诊断</h2><p>诊断仅限 Initiative 范围，不影响官方 Change、Spec 和 Archive。</p></div><strong>' + items.length + '</strong></header><ul>' + items.map(function (item) {
+            return '<li class="is-' + escapeHtml(item.severity) + '"><span>' + escapeHtml(item.code) + '</span><strong>' + escapeHtml(item.title) + '</strong><p>' + escapeHtml(item.message) + '</p></li>';
+        }).join('') + '</ul></section>';
+    }
+
+    function initiativeCard(item) {
+        return '<button class="initiative-row" type="button" data-provider-id="' + escapeHtml(item.providerId) + '" data-initiative-id="' + escapeHtml(item.id) + '"><span class="initiative-row-mark is-' + escapeHtml(item.health) + '">' + icon(initiativeHealthIcon(item.health), 17) + '</span><span class="initiative-row-copy"><span><strong>' + escapeHtml(item.title) + '</strong><em>' + escapeHtml(initiativeStatusLabel(item.status)) + '</em></span><p>' + escapeHtml(item.summary || item.goal || '暂无摘要') + '</p><small>' + escapeHtml(item.id) + ' · ' + item.changeRefs.length + ' Changes · ' + item.artifacts.length + ' 成果</small></span><span class="initiative-row-health"><span>' + escapeHtml(initiativeHealthLabel(item.health)) + '</span><small>' + escapeHtml(item.presentation.mode === 'custom' ? '专用视图' : '通用视图') + '</small></span>' + icon('chevron-right', 17) + '</button>';
+    }
+
+    function renderInitiatives() {
+        var items = state.snapshot.initiatives || [];
+        var diagnostics = state.snapshot.initiativeDiagnostics || [];
+        var relations = state.snapshot.changeRelations || { independentChangeIds: [] };
+        var changeIds = state.changeScope === 'all' ? null : new Set(relations.independentChangeIds);
+        var scopedChanges = changeIds ? state.snapshot.changes.filter(function (change) { return changeIds.has(change.id); }) : state.snapshot.changes;
+        var list = items.length ? '<div class="initiative-list">' + items.map(initiativeCard).join('') + '</div>' : '<div class="initiative-empty"><span>' + icon('layers-3', 24) + '</span><div><h2>当前项目没有 Initiative</h2><p>标准 OpenSpec Changes、Specs 和 Archives 仍按原有方式工作。</p></div></div>';
+        var scopeControl = '<div class="initiative-change-scope"><div><h2>Change 范围</h2><span>Initiative 只组织 Change，不改变官方索引。</span></div><div class="segmented-control" aria-label="Change 范围"><button class="segment-button" type="button" data-change-scope="independent" aria-pressed="' + (state.changeScope === 'independent') + '">独立 Change</button><button class="segment-button" type="button" data-change-scope="all" aria-pressed="' + (state.changeScope === 'all') + '">全部提案</button></div></div>';
+        page.innerHTML = '<header class="initiative-header"><div><span class="project-context">' + escapeHtml(state.snapshot.project.name) + '</span><h1>Initiatives</h1><p>跨 Change 的专项组织与受控成果阅读。</p></div><div class="initiative-summary"><strong>' + items.length + '</strong><span>专项</span><small>' + diagnostics.length + ' 条诊断</small></div></header><section class="initiative-section" aria-labelledby="initiative-list-title"><div class="section-heading"><div><h2 id="initiative-list-title">专项目录</h2><span>由应用内置的受信 Provider 发现</span></div></div>' + list + '</section>' + initiativeDiagnostics(diagnostics, false) + '<section class="initiative-change-section">' + scopeControl + proposalTable(scopedChanges, state.changeScope === 'all' ? '当前项目没有活跃提案' : '没有独立的活跃 Change') + '</section>';
+        refreshIcons();
+    }
+
+    function findInitiative(providerId, initiativeId) {
+        return (state.snapshot.initiatives || []).find(function (item) {
+            return item.providerId === providerId && item.id === initiativeId;
+        }) || null;
+    }
+
+    function initiativeChangeRows(descriptor) {
+        if (!descriptor.changeRefs.length) {
+            return '<div class="compact-empty">未关联 Change</div>';
+        }
+        return '<div class="initiative-reference-list">' + descriptor.changeRefs.map(function (ref) {
+            var active = state.snapshot.changes.find(function (change) { return change.id === ref.id; });
+            var archived = state.snapshot.archives.find(function (change) { return change.referenceId === ref.id; });
+            var entity = active || archived;
+            if (!entity) {
+                return '<div class="initiative-reference is-missing"><span>' + icon('file-warning', 16) + '</span><span><strong>' + escapeHtml(ref.id) + '</strong><small>' + escapeHtml(ref.relationship) + ' · 引用已失效</small></span></div>';
+            }
+            return '<button class="initiative-reference" type="button" data-entity-type="' + escapeHtml(entity.type) + '" data-entity-id="' + escapeHtml(entity.id) + '"><span>' + icon(entity.type === 'active' ? 'file-clock' : 'archive', 16) + '</span><span><strong>' + escapeHtml(entity.title) + '</strong><small>' + escapeHtml(ref.relationship) + ' · ' + escapeHtml(ref.id) + '</small></span>' + icon('arrow-up-right', 15) + '</button>';
+        }).join('') + '</div>';
+    }
+
+    function renderGenericInitiative(descriptor) {
+        var specificDiagnostics = (state.snapshot.initiativeDiagnostics || []).filter(function (item) {
+            return (!item.providerId || item.providerId === descriptor.providerId) && (!item.initiativeId || item.initiativeId === descriptor.id);
+        }).concat(descriptor.diagnostics || []);
+        page.innerHTML = '<button class="back-button" type="button" data-route="initiatives">' + icon('arrow-left', 16) + '返回专项</button><header class="initiative-detail-header"><div><span class="initiative-kicker">' + escapeHtml(descriptor.type) + ' · ' + escapeHtml(descriptor.id) + '</span><h1>' + escapeHtml(descriptor.title) + '</h1><p>' + escapeHtml(descriptor.summary) + '</p></div><div class="initiative-health-block is-' + escapeHtml(descriptor.health) + '">' + icon(initiativeHealthIcon(descriptor.health), 19) + '<span><strong>' + escapeHtml(initiativeHealthLabel(descriptor.health)) + '</strong><small>' + escapeHtml(initiativeStatusLabel(descriptor.status)) + '</small></span></div></header><div class="initiative-detail-grid"><main><section class="initiative-goal"><span>专项目标</span><p>' + escapeHtml(descriptor.goal || '未声明专项目标。') + '</p></section><section class="initiative-content-section"><div class="section-heading"><div><h2>关联 Changes</h2><span>owned 表示主要归属，related 仅表示关联</span></div><strong>' + descriptor.changeRefs.length + '</strong></div>' + initiativeChangeRows(descriptor) + '</section><section class="initiative-content-section"><div class="section-heading"><div><h2>已登记成果</h2><span>按稳定 ID 通过安全读取边界打开</span></div><strong>' + descriptor.artifacts.length + '</strong></div><div id="initiative-artifacts" class="initiative-artifact-list"><div class="loading-state is-compact" role="status" aria-live="polite" aria-label="正在读取成果索引"><span></span><span></span></div></div></section></main><aside>' + initiativeDiagnostics(specificDiagnostics, true) + '<section class="initiative-provider-meta"><span>Provider</span><strong>' + escapeHtml(descriptor.providerId) + '</strong><small>schema ' + descriptor.schemaVersion + ' · source ' + escapeHtml(descriptor.sourceHash.slice(0, 10)) + '</small></section></aside></div><section id="initiative-artifact-reader"></section>';
+        refreshIcons();
+        loadGenericInitiative(descriptor);
+    }
+
+    function artifactIndexHtml(items, selectedId) {
+        if (!items.length) { return '<div class="compact-empty">尚未登记成果</div>'; }
+        return items.map(function (artifact) {
+            return '<button class="initiative-artifact' + (artifact.id === selectedId ? ' is-selected' : '') + '" type="button" data-initiative-artifact="' + escapeHtml(artifact.id) + '"><span>' + icon(artifact.mediaType === 'text/markdown' ? 'file-text' : 'braces', 16) + '</span><span><strong>' + escapeHtml(artifact.title) + '</strong><small>' + escapeHtml(artifact.id) + ' · ' + Math.max(1, Math.ceil(artifact.size / 1024)) + ' KiB</small></span>' + icon('chevron-right', 15) + '</button>';
+        }).join('');
+    }
+
+    async function loadGenericInitiative(descriptor) {
+        var requestId = state.currentInitiativeRequest + 1;
+        state.currentInitiativeRequest = requestId;
+        var container = document.getElementById('initiative-artifacts');
+        try {
+            var payload = await bridge.initiatives.load({
+                projectId: state.projectId,
+                revision: state.revision,
+                providerId: descriptor.providerId,
+                initiativeId: descriptor.id
+            });
+            if (requestId !== state.currentInitiativeRequest || !container || !container.isConnected) { return; }
+            container.innerHTML = artifactIndexHtml(payload.artifactIndex || [], state.artifactId);
+            refreshIcons();
+            if (state.artifactId) {
+                var known = (payload.artifactIndex || []).some(function (item) { return item.id === state.artifactId; });
+                if (known) { await loadInitiativeArtifact(descriptor, state.artifactId, requestId); }
+                else { renderInitiativeArtifactError('成果不存在', '深链接中的成果 ID 未登记或已失效。'); }
+            }
+        } catch (error) {
+            if (requestId !== state.currentInitiativeRequest || !container) { return; }
+            container.innerHTML = '<div class="inline-diagnostic">' + icon('triangle-alert', 17) + '<span><strong>无法读取专项数据</strong><small>' + escapeHtml(error.message) + '</small></span><button class="text-button" type="button" data-action="refresh">重试</button></div>';
+            refreshIcons();
+        }
+    }
+
+    function renderInitiativeArtifactError(title, message) {
+        var reader = document.getElementById('initiative-artifact-reader');
+        if (!reader) { return; }
+        reader.innerHTML = '<section class="error-state initiative-artifact-error">' + icon('file-warning', 23) + '<h2>' + escapeHtml(title) + '</h2><p>' + escapeHtml(message) + '</p></section>';
+        refreshIcons();
+    }
+
+    async function loadInitiativeArtifact(descriptor, artifactId, expectedRequestId) {
+        var reader = document.getElementById('initiative-artifact-reader');
+        if (!reader) { return; }
+        reader.innerHTML = '<div class="loading-state is-compact" role="status" aria-live="polite" aria-label="正在读取成果"><span></span><span></span></div>';
+        try {
+            var payload = await bridge.initiatives.readArtifact({
+                projectId: state.projectId,
+                revision: state.revision,
+                providerId: descriptor.providerId,
+                initiativeId: descriptor.id,
+                sourceHash: descriptor.sourceHash,
+                artifactId: artifactId
+            });
+            if (expectedRequestId !== state.currentInitiativeRequest || !reader.isConnected) { return; }
+            var article = document.createElement('article');
+            article.className = payload.mediaType === 'text/markdown' ? 'markdown-body' : 'raw-markdown';
+            if (payload.mediaType === 'text/markdown') { article.appendChild(sanitizeMarkdown(payload.content)); }
+            else { article.textContent = payload.content; }
+            var section = document.createElement('section');
+            section.className = 'initiative-artifact-reader';
+            section.innerHTML = '<header><div><span>成果</span><h2>' + escapeHtml(payload.title) + '</h2><small>' + escapeHtml(payload.id) + '</small></div><button class="icon-button" type="button" data-action="close-initiative-artifact" aria-label="关闭成果" data-tooltip="关闭">' + icon('x', 16) + '</button></header>';
+            section.appendChild(article);
+            reader.replaceChildren(section);
+            refreshIcons();
+            requestAnimationFrame(function () { section.scrollIntoView({ block: 'start' }); });
+        } catch (error) {
+            if (expectedRequestId !== state.currentInitiativeRequest) { return; }
+            renderInitiativeArtifactError('无法读取成果', error.message);
+        }
+    }
+
+    function initiativeAppContext(descriptor) {
+        return Object.freeze({
+            projectId: state.projectId,
+            revision: state.revision,
+            providerId: descriptor.providerId,
+            initiativeId: descriptor.id,
+            descriptor: descriptor,
+            route: state.appRoute || 'overview',
+            theme: document.documentElement.getAttribute('data-resolved-theme') || 'light'
+        });
+    }
+
+    function disposeInitiativeApp(restoreFocus) {
+        var host = currentInitiativeAppHost;
+        currentInitiativeAppHost = null;
+        currentInitiativeAppKey = '';
+        initiativeAppOperation += 1;
+        if (!host) { return Promise.resolve(); }
+        return Promise.resolve(host.dispose(restoreFocus)).catch(function () {
+            showToast('专用 Initiative App 清理失败');
+        });
+    }
+
+    async function renderInitiativeAppError(host, container, descriptor, error) {
+        if (host && currentInitiativeAppHost === host) {
+            currentInitiativeAppHost = null;
+            currentInitiativeAppKey = '';
+            initiativeAppOperation += 1;
+            try { await host.dispose(false); } catch (disposeError) { /* 保持原始 App 错误。 */ }
+        }
+        if (!container.isConnected || state.providerId !== descriptor.providerId || state.initiativeId !== descriptor.id) { return; }
+        container.innerHTML = '<section class="error-state initiative-custom-error">' + icon('triangle-alert', 25) + '<h2>专用 Initiative App 运行失败</h2><p>' + escapeHtml(error && error.message ? error.message : '未知错误') + '</p><button class="secondary-command" type="button" data-action="retry-initiative-app">' + icon('rotate-ccw', 16) + '重试</button></section>';
+        refreshIcons();
+    }
+
+    function initiativeAppApi(descriptor) {
+        return {
+            setRoute: function (route) {
+                if (typeof route !== 'string' || !/^[a-z0-9][a-z0-9/_-]{0,319}$/.test(route)) {
+                    return Promise.reject(new Error('Initiative App 子路由无效'));
+                }
+                var host = currentInitiativeAppHost;
+                var container = host && host.root;
+                if (!host || currentInitiativeAppKey !== descriptor.providerId + ':' + descriptor.id) {
+                    return Promise.resolve(false);
+                }
+                state.appRoute = route === 'overview' ? '' : route;
+                syncUrl(false);
+                return host.update(initiativeAppContext(descriptor)).catch(function (error) {
+                    return renderInitiativeAppError(host, container, descriptor, error).then(function () { return false; });
+                });
+            },
+            load: function () {
+                return bridge.initiatives.load({
+                    projectId: state.projectId,
+                    revision: state.revision,
+                    providerId: descriptor.providerId,
+                    initiativeId: descriptor.id
+                });
+            },
+            readArtifact: function (sourceHash, artifactId) {
+                return bridge.initiatives.readArtifact({
+                    projectId: state.projectId,
+                    revision: state.revision,
+                    providerId: descriptor.providerId,
+                    initiativeId: descriptor.id,
+                    sourceHash: sourceHash,
+                    artifactId: artifactId
+                });
+            }
+        };
+    }
+
+    function renderCustomInitiative(descriptor) {
+        var app = initiativeAppRegistry.get(descriptor.presentation.appId);
+        if (!app) {
+            page.innerHTML = '<button class="back-button" type="button" data-route="initiatives">' + icon('arrow-left', 16) + '返回专项</button><section class="error-state initiative-custom-error">' + icon('blocks', 25) + '<h2>专用 Initiative App 不可用</h2><p>当前应用未安装 ' + escapeHtml(descriptor.presentation.appId) + '，且不会执行项目中的脚本或 HTML 尝试加载。</p><button class="secondary-command" type="button" data-route="initiatives">' + icon('undo-2', 16) + '返回通用专项列表</button></section>';
+            refreshIcons();
+            return;
+        }
+        var appKey = descriptor.providerId + ':' + descriptor.id;
+        if (currentInitiativeAppHost && currentInitiativeAppKey === appKey && currentInitiativeAppHost.root.isConnected) {
+            var currentHost = currentInitiativeAppHost;
+            currentHost.update(initiativeAppContext(descriptor)).catch(function (error) {
+                renderInitiativeAppError(currentHost, currentHost.root, descriptor, error);
+            });
+            return;
+        }
+        page.innerHTML = '<button class="back-button" type="button" data-route="initiatives">' + icon('arrow-left', 16) + '返回专项</button><section class="initiative-app-shell"><div class="initiative-app-boundary" id="initiative-app-boundary"><div class="loading-state is-compact" role="status" aria-live="polite" aria-label="正在载入专用 Initiative App"><span></span><span></span></div></div></section>';
+        refreshIcons();
+        var container = document.getElementById('initiative-app-boundary');
+        var host = new window.OpenSpecInitiativeApps.InitiativeAppHost(container, initiativeAppRegistry, initiativeAppApi(descriptor));
+        var operation = initiativeAppOperation + 1;
+        initiativeAppOperation = operation;
+        currentInitiativeAppHost = host;
+        currentInitiativeAppKey = appKey;
+        var returnFocus = document.querySelector('.primary-nav [data-route="initiatives"]');
+        host.mount(descriptor.presentation.appId, initiativeAppContext(descriptor), returnFocus).catch(function (error) {
+            if (operation === initiativeAppOperation) {
+                renderInitiativeAppError(host, container, descriptor, error);
+            }
+        });
+    }
+
+    function renderInitiativeDetail() {
+        var descriptor = findInitiative(state.providerId, state.initiativeId);
+        if (!descriptor) {
+            renderError('Initiative 已不存在', '该专项、Provider 或深链接可能已失效。刷新不会影响官方 Change 索引。');
+            return;
+        }
+        if (descriptor.presentation.mode !== 'custom' && state.appRoute && state.appRoute !== 'overview') {
+            renderError('专项页面不存在', '深链接中的专用子路由不受支持。');
+            return;
+        }
+        if (descriptor.presentation.mode === 'custom') { renderCustomInitiative(descriptor); }
+        else { renderGenericInitiative(descriptor); }
     }
 
     function queryTerms() { return state.query.toLowerCase().trim().split(/\s+/).filter(Boolean); }
@@ -582,11 +858,18 @@
 
     function render() {
         if (!state.snapshot) { renderLoading(); return; }
+        var selectedInitiative = state.view === 'initiative' ? findInitiative(state.providerId, state.initiativeId) : null;
+        var expectedAppKey = selectedInitiative && selectedInitiative.presentation.mode === 'custom' ? selectedInitiative.providerId + ':' + selectedInitiative.id : '';
+        if (currentInitiativeAppHost && currentInitiativeAppKey !== expectedAppKey) {
+            disposeInitiativeApp(false);
+        }
         updateNavigation();
         if (state.query) { state.view = 'search'; renderSearch(); }
         else if (state.view === 'overview') { renderOverview(); }
         else if (state.view === 'specs' || state.view === 'archives') { renderCollection(state.view); }
         else if (state.view === 'detail') { renderDetail(); }
+        else if (state.view === 'initiatives') { renderInitiatives(); }
+        else if (state.view === 'initiative') { renderInitiativeDetail(); }
         else { state.view = 'overview'; syncUrl(true); renderOverview(); }
     }
 
@@ -622,6 +905,24 @@
         finally { refreshButton.classList.remove('is-refreshing'); refreshButton.disabled = false; refreshIcons(); }
     }
 
+    async function checkForWorkspaceUpdates() {
+        if (updateCheckRunning || document.hidden || !state.snapshot || !bridge.workspace.checkUpdates) { return; }
+        updateCheckRunning = true;
+        try {
+            var result = await bridge.workspace.checkUpdates();
+            if (result.changed) {
+                state.currentDocumentRequest += 1;
+                state.currentInitiativeRequest += 1;
+                await loadWorkspace(false);
+                showToast('项目内容已更新');
+            }
+        } catch (error) {
+            showToast('自动刷新检查失败');
+        } finally {
+            updateCheckRunning = false;
+        }
+    }
+
     function applyTheme(value) {
         var theme = value || 'system';
         var resolved = theme;
@@ -629,6 +930,15 @@
         document.documentElement.setAttribute('data-resolved-theme', resolved);
         document.getElementById('app-shell').setAttribute('data-theme', theme);
         themeSelect.value = theme;
+        if (currentInitiativeAppHost && state.snapshot) {
+            var descriptor = findInitiative(state.providerId, state.initiativeId);
+            var host = currentInitiativeAppHost;
+            if (descriptor) {
+                host.update(initiativeAppContext(descriptor)).catch(function (error) {
+                    renderInitiativeAppError(host, host.root, descriptor, error);
+                });
+            }
+        }
     }
 
     async function copyDocumentPath() {
@@ -705,6 +1015,22 @@
         }
     }
 
+    async function restoreRouteProject() {
+        if (!state.routeProjectId || state.routeProjectId === state.registry.activeProjectId) {
+            return false;
+        }
+        var project = state.registry.projects.find(function (item) {
+            return item.id === state.routeProjectId && item.valid;
+        });
+        if (!project) {
+            return false;
+        }
+        state.registry = await bridge.projects.select(project.id);
+        updateProjectSelector();
+        await loadWorkspace(false);
+        return true;
+    }
+
     function renderProjectRegistry() {
         projectRegistryList.innerHTML = state.registry.projects.length ? state.registry.projects.map(function (project) {
             var current = project.id === state.registry.activeProjectId;
@@ -724,15 +1050,22 @@
     }
 
     function resetProjectView() {
+        disposeInitiativeApp(false);
         state.snapshot = null;
         state.projectId = null;
         state.entityType = '';
         state.entityId = '';
         state.documentId = '';
+        state.providerId = '';
+        state.initiativeId = '';
+        state.appRoute = '';
+        state.artifactId = '';
+        state.changeScope = 'independent';
         state.query = '';
         state.view = 'overview';
         resetOverviewFilters();
         state.currentDocumentRequest += 1;
+        state.currentInitiativeRequest += 1;
         searchInput.value = '';
         syncUrl(true);
         renderLoading();
@@ -813,6 +1146,9 @@
         var projectOptionButton = event.target.closest('[data-project-option]');
         var projectActionButton = event.target.closest('[data-project-action]');
         var routeButton = event.target.closest('[data-route]');
+        var initiativeButton = event.target.closest('[data-provider-id][data-initiative-id]');
+        var initiativeArtifactButton = event.target.closest('[data-initiative-artifact]');
+        var changeScopeButton = event.target.closest('[data-change-scope]');
         var entityButton = event.target.closest('[data-entity-type][data-entity-id]');
         var filterButtonElement = event.target.closest('[data-status-filter]');
         var panelButton = event.target.closest('[data-panel]');
@@ -833,6 +1169,8 @@
             if (action === 'copy-proposal-name') { copyProposalName(actionButton.getAttribute('data-proposal-name') || '', actionButton); return; }
             if (action === 'refresh') { loadWorkspace(true); return; }
             if (action === 'copy-path') { copyDocumentPath(); return; }
+            if (action === 'close-initiative-artifact') { state.artifactId = ''; syncUrl(false); renderInitiativeDetail(); return; }
+            if (action === 'retry-initiative-app') { state.appRoute = ''; syncUrl(true); renderInitiativeDetail(); return; }
             if (action === 'locate-current-task') {
                 var currentEntity = findEntity(state.entityType, state.entityId);
                 if (currentEntity && currentEntity.nextTask) {
@@ -843,6 +1181,9 @@
                 return;
             }
         }
+        if (initiativeButton) { setInitiative(initiativeButton.getAttribute('data-provider-id'), initiativeButton.getAttribute('data-initiative-id'), ''); return; }
+        if (initiativeArtifactButton && state.view === 'initiative') { state.artifactId = initiativeArtifactButton.getAttribute('data-initiative-artifact') || ''; syncUrl(false); renderInitiativeDetail(); return; }
+        if (changeScopeButton && state.view === 'initiatives') { state.changeScope = changeScopeButton.getAttribute('data-change-scope') === 'all' ? 'all' : 'independent'; syncUrl(true); renderInitiatives(); changeScopeButton = page.querySelector('[data-change-scope="' + state.changeScope + '"]'); if (changeScopeButton) { changeScopeButton.focus(); } return; }
         if (routeButton) { setView(routeButton.getAttribute('data-route')); return; }
         if (filterButtonElement) {
             var filter = filterButtonElement.getAttribute('data-status-filter');
@@ -931,8 +1272,21 @@
     });
     themeSelect.addEventListener('change', function () { localStorage.setItem('openspec-workbench-theme', themeSelect.value); applyTheme(themeSelect.value); });
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { if (themeSelect.value === 'system') { applyTheme('system'); } });
-    window.addEventListener('popstate', function () { readUrl(); render(); });
-    window.addEventListener('hashchange', function () { readUrl(); render(); });
+    async function handleRouteChange() {
+        readUrl();
+        if (!await restoreRouteProject()) { render(); }
+    }
+    window.addEventListener('popstate', function () { handleRouteChange(); });
+    window.addEventListener('hashchange', function () { handleRouteChange(); });
+    window.addEventListener('focus', checkForWorkspaceUpdates);
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) { checkForWorkspaceUpdates(); }
+    });
+    window.addEventListener('beforeunload', function () {
+        if (updateTimer) { clearInterval(updateTimer); }
+        state.currentInitiativeRequest += 1;
+        disposeInitiativeApp(false);
+    });
 
     async function initialize() {
         if (!bridge) {
@@ -943,8 +1297,10 @@
         applyTheme(localStorage.getItem('openspec-workbench-theme') || 'system');
         refreshIcons();
         await refreshRegistry();
+        await restoreRouteProject();
         await loadWorkspace(false);
         bridge.workspace.onChanged(function () { loadWorkspace(false); });
+        updateTimer = setInterval(checkForWorkspaceUpdates, 30000);
     }
 
     initialize().catch(function (error) {

@@ -3,6 +3,8 @@
 var fs = require('node:fs');
 var fsPromises = require('node:fs/promises');
 var path = require('node:path');
+var initiativeContract = require('./initiative-contract');
+var createDefaultInitiativeRegistry = require('./initiative-providers').createDefaultInitiativeRegistry;
 var markdown = require('./markdown');
 var openspecCli = require('./openspec-cli');
 
@@ -135,6 +137,7 @@ function combineWarnings(documents, ownWarnings) {
 
 async function buildChange(directory, collection, context, officialStatuses) {
     var changeId = path.basename(directory);
+    var referenceId = collection === 'archive' ? changeId.replace(/^\d{4}-\d{2}-\d{2}-/, '') : changeId;
     var files = await walkMarkdownFiles(directory);
     var documents = [];
     var warnings = [];
@@ -185,6 +188,7 @@ async function buildChange(directory, collection, context, officialStatuses) {
 
     return {
         id: changeId,
+        referenceId: referenceId,
         type: collection,
         title: proposalHeading ? proposalHeading.text.replace(/^Proposal:\s*/i, '') : titleFromId(changeId),
         summary: proposal ? proposal.summary : '',
@@ -364,6 +368,7 @@ async function buildWorkspace(projectContext, options) {
     var changes = [];
     var archives = [];
     var specs = [];
+    var initiativeRegistry = settings.initiativeRegistry || createDefaultInitiativeRegistry();
 
     for (var changeIndex = 0; changeIndex < activeDirectories.length; changeIndex += 1) {
         changes.push(await buildChange(activeDirectories[changeIndex], 'active', context, officialStatuses));
@@ -394,6 +399,12 @@ async function buildWorkspace(projectContext, options) {
     changes.sort(sortByModifiedDescending);
     archives.sort(sortByModifiedDescending);
     specs.sort(function (left, right) { return left.id.localeCompare(right.id); });
+
+    var initiativeDiscovery = await initiativeRegistry.discover(roots);
+    var initiatives = initiativeDiscovery.initiatives;
+    var changeRelations = initiativeContract.createRelationshipIndex(changes.concat(archives), initiatives);
+    var initiativeDiagnostics = initiativeDiscovery.diagnostics.concat(changeRelations.diagnostics);
+    var providerFingerprint = initiativeContract.sha256(initiativeContract.stableJson(initiativeDiscovery.fingerprints));
 
     var collections = { changes: changes, specs: specs, archives: archives };
     var totalTasks = changes.reduce(function (total, change) { return total + change.tasks.total; }, 0);
@@ -435,11 +446,16 @@ async function buildWorkspace(projectContext, options) {
             readyToArchive: changes.filter(function (change) { return change.controlState === 'ready-to-archive'; }).length,
             attentionChanges: changes.filter(function (change) { return change.controlState === 'attention'; }).length,
             inProgressChanges: changes.filter(function (change) { return change.controlState === 'in-progress'; }).length,
-            issues: changes.filter(function (change) { return change.hasIssues; }).length + specs.filter(function (spec) { return spec.hasIssues; }).length
+            issues: changes.filter(function (change) { return change.hasIssues; }).length + specs.filter(function (spec) { return spec.hasIssues; }).length,
+            initiatives: initiatives.length,
+            initiativeIssues: initiativeDiagnostics.filter(function (item) { return item.severity === 'error'; }).length
         },
         changes: changes,
         specs: specs,
         archives: archives,
+        initiatives: initiatives,
+        initiativeDiagnostics: initiativeDiagnostics,
+        changeRelations: changeRelations,
         taskQueue: taskQueue,
         recent: changes.concat(archives).sort(sortByModifiedDescending).slice(0, 8).map(function (entity) {
             return { id: entity.id, type: entity.type, title: entity.title, modifiedAt: entity.modifiedAt };
@@ -450,7 +466,9 @@ async function buildWorkspace(projectContext, options) {
     return {
         roots: roots,
         snapshot: snapshot,
-        documents: documents
+        documents: documents,
+        initiativeRegistry: initiativeRegistry,
+        providerFingerprint: providerFingerprint
     };
 }
 

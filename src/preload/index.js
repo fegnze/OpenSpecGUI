@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('openSpecGUI', Object.freeze({
     workspace: Object.freeze({
         load: function () { return invoke('workspace:load'); },
         refresh: function () { return invoke('workspace:refresh'); },
+        checkUpdates: function () { return invoke('workspace:check-updates'); },
         onChanged: function (callback) {
             var listener = function () { callback(); };
             ipcRenderer.on('workspace:changed', listener);
@@ -27,6 +28,10 @@ contextBridge.exposeInMainWorld('openSpecGUI', Object.freeze({
     }),
     documents: Object.freeze({
         read: function (request) { return invoke('documents:read', request); }
+    }),
+    initiatives: Object.freeze({
+        load: function (request) { return invoke('initiatives:load', request); },
+        readArtifact: function (request) { return invoke('initiatives:read-artifact', request); }
     }),
     clipboard: Object.freeze({
         write: function (text) { return invoke('clipboard:write', { text: text }); }

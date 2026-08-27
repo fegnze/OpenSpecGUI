@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "initiative-provider.schema.json",
+  "title": "Resource Program Initiative Provider Signature",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "providerId", "initiativeId", "summary"],
+  "properties": {
+    "$schema": { "const": "contracts/initiative-provider.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "providerId": { "const": "wtc-resource-program-v1" },
+    "initiativeId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 120 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 240 }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "health": { "diagnostics": [], "status": "healthy" },
+  "initiativeId": "sample-resource-program",
+  "kind": "resource-program",
+  "presentationMode": "specialized-app",
+  "providerId": "wtc-resource-program-v1",
+  "relatedChangeIds": ["sample-change"],
+  "schemaVersion": 1,
+  "sourceHash": "754e6c7b6f3a7434138e4484fa9679d7e0fe61a8cb923dcf3dc311f2d565dc17",
+  "summary": "验证通用 Resource Program Provider 契约",
+  "summaryStatus": { "authority": "derived", "value": "in-progress" },
+  "title": "示例资源 Program"
+}

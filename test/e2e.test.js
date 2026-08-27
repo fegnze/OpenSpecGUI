@@ -145,7 +145,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         assert.equal(await page.locator('.proposal-lane-card').count(), 3);
         assert.equal(await page.locator('.control-table-row').count(), 0);
         assert.deepEqual(await page.locator('.proposal-lane h2').allTextContents(), ['进行中', '待归档', '需要处理']);
-        assert.equal(await page.locator('.primary-nav [data-route]').count(), 3);
+        assert.equal(await page.locator('.primary-nav [data-route]').count(), 4);
         assert.equal(await page.locator('[data-route="changes"]').count(), 0);
         var overviewProgress = await page.locator('.proposal-lane-card[data-entity-id="modern-console"] .progress-bar').evaluate(function (progressBar) {
             var segments = Array.from(progressBar.querySelectorAll('.progress-segment'));
@@ -270,12 +270,65 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         assert.doesNotMatch(await page.evaluate(function () { return window.location.hash; }), /status=/);
 
         await page.evaluate(function () { window.location.hash = 'view=changes&status=attention'; });
-        await page.waitForFunction(function () { return window.location.hash === '#view=overview'; });
+        await page.waitForFunction(function () {
+            var params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+            return params.get('view') === 'overview' && Boolean(params.get('project')) && !params.has('status');
+        });
         assert.equal(await page.locator('.control-header h1').textContent(), '当前执行');
         assert.equal(await page.locator('.metric-block').count(), 4);
         assert.equal(await page.locator('.proposal-lane-card').count(), 3);
         assert.equal(await page.locator('.control-table-row').count(), 0);
         assert.equal(await page.locator('.metric-block[data-status-filter="all"]').getAttribute('aria-pressed'), 'true');
+
+        await page.locator('.primary-nav [data-route="initiatives"]').focus();
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('.initiative-list');
+        assert.equal(await page.locator('.initiative-row').count(), 2);
+        assert.match(await page.locator('.initiative-row[data-provider-id="openspec-generic-initiative-v1"]').textContent(), /发布准备专项/);
+        assert.equal(await page.locator('.initiative-diagnostics li').count(), 2);
+        assert.match(await page.locator('.initiative-diagnostics').textContent(), /多个 Initiative|重复归属|owned/i);
+        assert.equal(await page.locator('.control-table-row').count(), 3);
+        assert.equal(await page.locator('[data-change-scope="independent"]').getAttribute('aria-pressed'), 'true');
+        await page.locator('[data-change-scope="all"]').click();
+        assert.equal(await page.locator('.control-table-row').count(), 3);
+        assert.equal(await page.locator('[data-change-scope="all"]').getAttribute('aria-pressed'), 'true');
+        await uiHelpers.assertNoSeriousA11yViolations(page, 'Initiative 列表');
+        await uiHelpers.assertNoPageOverflow(page, 'Initiative 列表');
+        await uiHelpers.assertTextFits(page, ['.initiative-row-copy strong', '.initiative-row-copy p', '.initiative-diagnostics li'], 'Initiative 列表');
+        await uiHelpers.assertReachable(page, ['[data-route="overview"]', '.initiative-row', '[data-change-scope="independent"]'], 'Initiative 列表');
+
+        await page.locator('.initiative-row[data-provider-id="openspec-generic-initiative-v1"]').focus();
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('.initiative-detail-grid');
+        assert.match(await page.locator('.initiative-detail-header h1').textContent(), /发布准备专项/);
+        assert.equal(await page.locator('.initiative-reference').count(), 2);
+        await page.waitForSelector('[data-initiative-artifact="release-summary"]');
+        await page.locator('[data-initiative-artifact="release-summary"]').click();
+        await page.waitForSelector('.initiative-artifact-reader .markdown-body');
+        assert.match(await page.locator('.initiative-artifact-reader .markdown-body').textContent(), /核心交付链路已就绪/);
+        assert.match(await page.evaluate(function () { return window.location.hash; }), /provider=openspec-generic-initiative-v1/);
+        assert.match(await page.evaluate(function () { return window.location.hash; }), /project=/);
+        assert.match(await page.evaluate(function () { return window.location.hash; }), /artifact=release-summary/);
+        await fsPromises.writeFile(path.join(projectAlpha, 'openspec', 'initiatives', 'release-readiness', 'summary.md'), '# 发布结论\n\n外部更新已被条件刷新捕获。\n', 'utf8');
+        await page.evaluate(function () { window.dispatchEvent(new Event('focus')); });
+        await page.waitForFunction(function () {
+            var article = document.querySelector('.initiative-artifact-reader .markdown-body');
+            return article && article.textContent.indexOf('外部更新已被条件刷新捕获') !== -1;
+        });
+        assert.match(await page.evaluate(function () { return window.location.hash; }), /artifact=release-summary/);
+        await page.locator('#refresh-button').click();
+        await page.waitForSelector('.initiative-artifact-reader .markdown-body');
+        assert.match(await page.evaluate(function () { return window.location.hash; }), /artifact=release-summary/);
+        await page.setViewportSize({ width: 820, height: 640 });
+        await uiHelpers.assertNoPageOverflow(page, '820x640 Initiative 详情');
+        await uiHelpers.assertNoControlOverlap(page, '820x640 Initiative 详情');
+        await uiHelpers.assertNoSeriousA11yViolations(page, '820x640 Initiative 详情');
+        await uiHelpers.assertTextFits(page, ['.initiative-detail-header h1', '.initiative-goal p', '.initiative-artifact strong'], '820x640 Initiative 详情');
+        await page.setViewportSize({ width: 1440, height: 930 });
+        await page.locator('.back-button[data-route="initiatives"]').click();
+        await page.waitForSelector('.initiative-list');
+        await page.locator('.primary-nav [data-route="overview"]').click();
+        await page.waitForSelector('.control-header');
 
         await page.locator('.proposal-lane-card[data-entity-id="modern-console"]').focus();
         await page.keyboard.press('Enter');
@@ -348,7 +401,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         assert.equal(securityState.imageSource, null);
         assert.equal(securityState.imageHandler, null);
         assert.equal(securityState.requireType, 'undefined');
-        assert.deepEqual(securityState.apiKeys, ['clipboard', 'documents', 'projects', 'workspace']);
+        assert.deepEqual(securityState.apiKeys, ['clipboard', 'documents', 'initiatives', 'projects', 'workspace']);
         await uiHelpers.assertNoSeriousA11yViolations(page, '文档阅读');
         await uiHelpers.assertNoPageOverflow(page, '文档阅读');
         await uiHelpers.assertReachable(page, ['[data-panel="tasks"]', '[data-mode="rendered"]', '[data-mode="raw"]', '[data-action="copy-path"]'], '文档阅读');
@@ -420,8 +473,19 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         var removed = await page.evaluate(function () { return window.openSpecGUI.projects.list(); });
         assert.equal(removed.projects.some(function (project) { return project.id === beta.id; }), false);
 
-        await page.evaluate(function (root) { return window.openSpecGUI.projects.add({ paths: [root] }); }, uiHelpers.repositoryRoot);
+        var repositoryProjectId = await page.evaluate(async function (root) {
+            var result = await window.openSpecGUI.projects.add({ paths: [root] });
+            return result.added[0].id;
+        }, uiHelpers.repositoryRoot);
+        await page.evaluate(function (projectId) {
+            history.replaceState(null, '', '#view=overview&project=' + encodeURIComponent(projectId));
+        }, repositoryProjectId);
         await page.reload();
+        await page.waitForSelector('.control-header');
+        var repositoryContext = await page.evaluate(function () {
+            return { title: document.title, project: document.querySelector('#project-picker-name').textContent };
+        });
+        assert.deepEqual(repositoryContext, { title: 'OpenSpecGUI · OpenSpec GUI', project: 'OpenSpecGUI' });
         await page.locator('.primary-nav [data-route="archives"]').click();
         await page.waitForSelector('.document-row[data-entity-id="2026-08-24-refine-workbench-visual-system"]');
         var archiveListCopy = page.locator('.document-row-shell[data-entity-id="2026-08-24-refine-workbench-visual-system"] [data-action="copy-proposal-name"]');
@@ -457,6 +521,9 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         await uiHelpers.assertTextFits(page, ['.document-detail-header h1', '.markdown-body li'], '真实大型归档详情');
         var atlas = registry.projects.find(function (project) { return project.name === 'atlas-workbench'; });
         await page.evaluate(function (projectId) { return window.openSpecGUI.projects.select(projectId); }, atlas.id);
+        await page.evaluate(function (projectId) {
+            history.replaceState(null, '', '#view=overview&project=' + encodeURIComponent(projectId));
+        }, atlas.id);
         await page.reload();
         await page.waitForFunction(function () { return document.title.indexOf('atlas-workbench') === 0; });
 
@@ -494,6 +561,157 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         if (electronApp) {
             await electronApp.close();
         }
+        await fixture.cleanup();
+    }
+});
+
+test('Resource Program Initiative App 完成任务、成果、图形、刷新与深链接工作流', { timeout: 120000 }, async function () {
+    var fixture = await uiFixture.createUiFixture();
+    var electronApp;
+    try {
+        var launched = await uiHelpers.launchWorkbench(fixture, {
+            theme: 'light',
+            userDataName: 'resource-program-user-data'
+        });
+        electronApp = launched.electronApp;
+        var page = launched.page;
+        await uiHelpers.addFixtureProjects(page, fixture);
+        await page.setViewportSize({ width: 1440, height: 930 });
+        await page.locator('.primary-nav [data-route="initiatives"]').click();
+        await page.waitForSelector('.initiative-list');
+        var programInitiative = page.locator('.initiative-row[data-provider-id="wtc-resource-program-v1"]');
+        assert.equal(await programInitiative.count(), 1);
+        assert.match(await programInitiative.textContent(), /delivery-resource-program Program/);
+        await programInitiative.click();
+        await page.waitForSelector('[data-initiative-app="resource-program-v1"] .resource-program-app');
+        assert.match(await page.locator('.rp-header h1').textContent(), /delivery-resource-program Program/);
+        assert.equal(await page.locator('.rp-metric').count(), 4);
+        assert.match(await page.evaluate(function () { return window.location.hash; }), /provider=wtc-resource-program-v1/);
+
+        await page.locator('[data-rp-route="changes"]').click();
+        await page.waitForSelector('.rp-change-row');
+        assert.equal(await page.locator('.rp-change-row').count(), 1);
+        await page.locator('.rp-change-row').click();
+        await page.waitForSelector('.rp-task-row');
+        assert.equal(await page.locator('.rp-task-row').count(), 1);
+        assert.match(await page.locator('[data-rp-tasks="open"]').textContent(), /未完成 1/);
+        await page.locator('[data-rp-tasks="all"]').click();
+        await page.waitForFunction(function () { return document.querySelectorAll('.rp-task-row').length === 6; });
+        assert.equal(await page.locator('.rp-task-row').count(), 6);
+        assert.equal(await page.locator('[data-rp-tasks="all"]').getAttribute('aria-pressed'), 'true');
+
+        await page.locator('[data-rp-route="artifacts"]').click();
+        await page.waitForSelector('.rp-artifact-browser');
+        assert.equal(await page.locator('[data-rp-lens]').count(), 4);
+        assert.deepEqual(await page.locator('[data-rp-lens]').evaluateAll(function (items) {
+            return items.map(function (item) { return item.getAttribute('data-rp-lens'); });
+        }), ['conclusions', 'design', 'evidence', 'all']);
+        await page.locator('[data-rp-lens="conclusions"]').click();
+        await page.waitForSelector('.rp-artifact-row');
+        await page.locator('.rp-artifact-row').first().click();
+        await page.waitForSelector('.rp-markdown .rp-diagram');
+        assert.equal(await page.evaluate(function () { return Boolean(window.__resourceProgramPwned); }), false);
+        assert.equal(await page.locator('.rp-markdown script').count(), 0);
+        assert.equal(await page.locator('.rp-markdown a[href^="javascript:"]').count(), 0);
+
+        var diagram = page.locator('.rp-diagram').first();
+        await diagram.scrollIntoViewIfNeeded();
+        await page.waitForFunction(function () {
+            var block = document.querySelector('.rp-diagram');
+            return block && block.getAttribute('data-rp-render-state') === 'rendered';
+        });
+        assert.equal(await diagram.locator('.rp-diagram-source').isHidden(), true);
+        var svgMetrics = await diagram.locator('svg').evaluate(function (svg) {
+            var rect = svg.getBoundingClientRect();
+            return { width: rect.width, height: rect.height, elements: svg.querySelectorAll('path,rect,line,polygon,text').length };
+        });
+        assert.ok(svgMetrics.width > 40 && svgMetrics.height > 30 && svgMetrics.elements > 0,
+            'Mermaid 图形应有非空可见内容：' + JSON.stringify(svgMetrics));
+        await diagram.locator('[data-rp-diagram-mode="source"]').click();
+        assert.equal(await diagram.locator('.rp-diagram-source').isVisible(), true);
+        await diagram.locator('[data-rp-diagram-mode="graphic"]').click();
+        assert.equal(await diagram.locator('.rp-diagram-graphic').isVisible(), true);
+
+        await diagram.locator('[data-rp-diagram-link]').click();
+        await page.waitForFunction(function () { return window.location.hash.indexOf('diagram%2F') !== -1 || window.location.hash.indexOf('diagram/') !== -1; });
+        var deepLink = await page.evaluate(function () { return window.location.hash; });
+        await page.reload();
+        await page.waitForSelector('[data-initiative-app="resource-program-v1"] .rp-diagram');
+        await page.waitForFunction(function () {
+            var block = document.querySelector('.rp-diagram');
+            return block && block.getAttribute('data-rp-render-state') === 'rendered';
+        });
+        assert.equal(await page.evaluate(function () { return window.location.hash; }), deepLink);
+
+        var designPath = path.join(fixture.primaryProject, 'openspec', 'programs', 'delivery-resource-program', 'program-orchestration-design.md');
+        await fsPromises.appendFile(designPath, '\n刷新后的专项结论。\n', 'utf8');
+        await page.evaluate(function () { window.dispatchEvent(new Event('focus')); });
+        await page.waitForFunction(function () {
+            var reader = document.querySelector('.rp-markdown');
+            return reader && reader.textContent.indexOf('刷新后的专项结论') !== -1;
+        });
+
+        await page.setViewportSize({ width: 820, height: 640 });
+        await page.evaluate(function () { document.querySelector('.workspace').scrollTop = 0; });
+        await uiHelpers.assertNoPageOverflow(page, '820x640 Resource Program App');
+        await uiHelpers.assertNoControlOverlap(page, '820x640 Resource Program App');
+        await uiHelpers.assertNoSeriousA11yViolations(page, '820x640 Resource Program App');
+        await uiHelpers.assertTextFits(page, ['.rp-header h1', '.rp-artifact-header h2', '.rp-diagram header span'], '820x640 Resource Program App');
+    } finally {
+        if (electronApp) { await electronApp.close(); }
+        await fixture.cleanup();
+    }
+});
+
+test('可信 Initiative App 通过真实宿主完成生命周期、错误隔离和项目切换清理', { timeout: 60000 }, async function () {
+    var fixture = await uiFixture.createUiFixture();
+    var electronApp;
+    try {
+        var launched = await uiHelpers.launchWorkbench(fixture, { theme: 'dark', trustedFixtureApp: true, userDataName: 'trusted-app-user-data' });
+        electronApp = launched.electronApp;
+        var page = launched.page;
+        await uiHelpers.addFixtureProjects(page, fixture);
+        await page.locator('.primary-nav [data-route="initiatives"]').click();
+        await page.waitForSelector('.initiative-list');
+        var customInitiative = page.locator('.initiative-row', { hasText: '可信 App Host 验收专项' });
+        await customInitiative.click();
+        await page.waitForSelector('[data-initiative-app="trusted-fixture-app"]');
+        assert.match(await page.locator('.trusted-fixture-route').textContent(), /overview/);
+
+        await page.locator('[data-fixture-route="details"]').click();
+        await page.waitForFunction(function () {
+            return document.querySelector('.trusted-fixture-route').textContent.indexOf('details') !== -1;
+        });
+        assert.match(await page.evaluate(function () { return window.location.hash; }), /route=details/);
+        assert.equal(await page.locator('[data-initiative-app="trusted-fixture-app"]').count(), 1);
+
+        await page.locator('[data-fixture-route="failure"]').click();
+        await page.waitForSelector('[data-action="retry-initiative-app"]');
+        assert.match(await page.locator('.initiative-custom-error').textContent(), /可信 App 测试异常/);
+        assert.equal(await page.locator('.primary-nav [data-route="initiatives"]').count(), 1);
+        await page.locator('[data-action="retry-initiative-app"]').click();
+        await page.waitForSelector('[data-initiative-app="trusted-fixture-app"]');
+        assert.match(await page.locator('.trusted-fixture-route').textContent(), /overview/);
+
+        await page.locator('.back-button[data-route="initiatives"]').click();
+        await page.waitForSelector('.initiative-list');
+        await page.waitForFunction(function () {
+            return document.activeElement === document.querySelector('.primary-nav [data-route="initiatives"]');
+        });
+        await page.locator('.initiative-row', { hasText: '可信 App Host 验收专项' }).click();
+        await page.waitForSelector('[data-initiative-app="trusted-fixture-app"]');
+
+        await page.locator('#project-picker-button').click();
+        await page.locator('.project-option', { hasText: 'empty-specs' }).click();
+        await page.waitForSelector('.control-header');
+        assert.equal(await page.locator('[data-initiative-app="trusted-fixture-app"]').count(), 0);
+        var metrics = await page.evaluate(function () { return window.OpenSpecTrustedInitiativeAppMetrics; });
+        assert.ok(metrics.mounts >= 3);
+        assert.ok(metrics.updates >= 2);
+        assert.ok(metrics.disposes >= 3);
+        assert.equal(metrics.routeRequests, 2);
+    } finally {
+        if (electronApp) { await electronApp.close(); }
         await fixture.cleanup();
     }
 });

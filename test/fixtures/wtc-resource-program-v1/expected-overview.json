@@ -1,0 +1,26 @@
+{
+  "assignments": [
+    { "acceptanceChecks": ["契约通过"], "assignmentId": "deliver-sample", "changeId": "sample-change", "executorRole": "main-agent", "implementationEvidence": [], "objective": "交付示例", "prohibitedActions": [], "risk": "high", "scope": ["openspec"], "stage": "delivery", "status": "active", "taskIds": ["1.1"], "verdict": null, "verificationEvidence": [], "verifierRole": "verification-subagent" }
+  ],
+  "blockers": [],
+  "changes": [
+    { "archived": false, "blockerIds": [], "changeId": "sample-change", "kind": "quality", "resourceSourceAccess": "none", "risk": "high", "status": "active", "tasks": { "completed": 1, "total": 2 }, "title": "示例 Change", "workstreamId": "ws-01-foundation" }
+  ],
+  "contracts": { "consumptions": [], "impactReviews": [], "locks": [] },
+  "gates": [
+    { "evidence": [], "gateId": "gate-contract", "requiredChanges": [], "requiredEvidence": [], "status": "passed", "title": "契约", "type": "contract" },
+    { "evidence": [], "gateId": "gate-delivery", "requiredChanges": [], "requiredEvidence": ["evidence/verification.md"], "status": "pending", "title": "交付", "type": "delivery" }
+  ],
+  "initiativeId": "sample-resource-program",
+  "milestones": [
+    { "gateId": "gate-delivery", "milestoneId": "provider-ready", "status": "pending", "title": "Provider Ready" }
+  ],
+  "program": { "programId": "sample-resource-program", "title": "示例资源 Program" },
+  "providerId": "wtc-resource-program-v1",
+  "schemaVersion": 1,
+  "sourceHash": "754e6c7b6f3a7434138e4484fa9679d7e0fe61a8cb923dcf3dc311f2d565dc17",
+  "summaryStatus": { "authority": "derived", "value": "in-progress" },
+  "workstreams": [
+    { "document": "workstreams/ws-01-foundation.md", "name": "基础", "objective": "冻结契约", "workstreamId": "ws-01-foundation" }
+  ]
+}

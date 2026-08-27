@@ -20,6 +20,11 @@ async function launchWorkbench(fixture, options) {
         PATH: '/usr/bin:/bin',
         ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
     });
+    if (settings.trustedFixtureApp === true) {
+        environment.OPENSPEC_GUI_TEST_TRUSTED_APP = '1';
+    } else {
+        delete environment.OPENSPEC_GUI_TEST_TRUSTED_APP;
+    }
     var electronApp = await electron.launch({
         executablePath: electronExecutable,
         args: applicationArguments,

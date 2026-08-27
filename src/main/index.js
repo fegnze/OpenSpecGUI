@@ -5,6 +5,7 @@ var path = require('node:path');
 var url = require('node:url');
 var ProjectRegistry = require('./project-registry').ProjectRegistry;
 var WorkbenchService = require('./workbench-service').WorkbenchService;
+var createDefaultInitiativeRegistry = require('../core/initiative-providers').createDefaultInitiativeRegistry;
 var registerIpc = require('./ipc').registerIpc;
 
 var app = electron.app;
@@ -113,6 +114,9 @@ if (!app.requestSingleInstanceLock()) {
         var registry = new ProjectRegistry(path.join(app.getPath('userData'), 'projects.json'));
         service = new WorkbenchService(registry, {
             now: process.env.OPENSPEC_GUI_TEST_NOW || '',
+            initiativeRegistry: createDefaultInitiativeRegistry({
+                includeTrustedFixtureProvider: process.env.OPENSPEC_GUI_TEST_TRUSTED_APP === '1'
+            }),
             cliOptions: {
                 command: process.env.OPENSPEC_GUI_CLI || '',
                 bundledCommand: process.resourcesPath ? path.join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'openspec.cmd' : 'openspec') : ''
