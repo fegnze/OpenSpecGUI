@@ -96,6 +96,67 @@ async function waitForCopyFeedback(page) {
     });
 }
 
+test('页内查找在当前内容中高亮、导航并随路由清理', { timeout: 120000 }, async function () {
+    var fixture = await uiFixture.createUiFixture();
+    var electronApp;
+    try {
+        var launched = await uiHelpers.launchWorkbench(fixture, { theme: 'light', userDataName: 'in-page-search-user-data' });
+        electronApp = launched.electronApp;
+        var page = launched.page;
+        await uiHelpers.addFixtureProjects(page, fixture);
+        await page.locator('.proposal-lane-card[data-entity-id="modern-console"]').click();
+        await page.locator('[data-panel="documents"]').click();
+        await page.waitForSelector('.markdown-body');
+
+        var originalHash = await page.evaluate(function () { return window.location.hash; });
+        await page.keyboard.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f');
+        await page.waitForSelector('#in-page-search:not([hidden])');
+        assert.equal(await page.evaluate(function () { return document.activeElement.id; }), 'in-page-search-input');
+        assert.equal(await page.evaluate(function () { return window.location.hash; }), originalHash);
+
+        await page.locator('#in-page-search-input').fill('任务');
+        await page.waitForFunction(function () {
+            return /^1 \/ [1-9]\d*$/.test(document.getElementById('in-page-search-count').textContent);
+        });
+        var count = await page.locator('#in-page-search-count').textContent();
+        var total = Number(count.split('/')[1].trim());
+        assert.ok(total > 1, '夹具文档应包含多个“任务”匹配项');
+        var highlightState = await page.evaluate(function () {
+            var supports = Boolean(window.CSS && window.CSS.highlights && window.CSS.highlights.get('openspec-in-page-search'));
+            return supports ? {
+                all: window.CSS.highlights.get('openspec-in-page-search').size,
+                current: window.CSS.highlights.get('openspec-in-page-search-current').size
+            } : {
+                all: document.querySelectorAll('[data-in-page-search-match]').length,
+                current: document.querySelectorAll('[data-in-page-search-match].is-current').length
+            };
+        });
+        assert.equal(highlightState.all, total);
+        assert.equal(highlightState.current, 1);
+
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(function () { return /^2 \/ /.test(document.getElementById('in-page-search-count').textContent); });
+        await page.keyboard.press('Shift+Enter');
+        await page.waitForFunction(function () { return /^1 \/ /.test(document.getElementById('in-page-search-count').textContent); });
+
+        await page.keyboard.press('Escape');
+        await page.waitForSelector('#in-page-search[hidden]');
+        assert.equal(await page.locator('#in-page-search-count').textContent(), '0 / 0');
+        await page.keyboard.press('/');
+        assert.equal(await page.evaluate(function () { return document.activeElement.id; }), 'global-search');
+
+        await page.keyboard.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f');
+        await page.locator('#in-page-search-input').fill('任务');
+        await page.locator('.primary-nav [data-route="archives"]').click();
+        await page.waitForSelector('.document-row-shell');
+        assert.equal(await page.locator('#in-page-search').getAttribute('hidden'), '');
+        assert.equal(await page.locator('#in-page-search-count').textContent(), '0 / 0');
+    } finally {
+        if (electronApp) { await electronApp.close(); }
+        await fixture.cleanup();
+    }
+});
+
 test('独立 Electron 应用完成多项目任务工作流与视觉验收', { timeout: 180000 }, async function () {
     var fixture = await uiFixture.createUiFixture();
     var temporaryRoot = fixture.root;

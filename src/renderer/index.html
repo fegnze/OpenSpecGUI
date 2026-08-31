@@ -96,6 +96,19 @@
                 </div>
             </header>
 
+            <section class="in-page-search" id="in-page-search" aria-label="页内查找" hidden>
+                <label for="in-page-search-input">
+                    <span class="sr-only">查找当前页面文本</span>
+                    <input id="in-page-search-input" type="search" autocomplete="off" placeholder="查找当前页面">
+                </label>
+                <output id="in-page-search-count" aria-live="polite">0 / 0</output>
+                <div class="in-page-search-actions" aria-label="查找结果导航">
+                    <button class="icon-button" id="in-page-search-previous" type="button" data-in-page-search-action="previous" aria-label="上一处匹配" disabled><i data-lucide="chevron-up" aria-hidden="true"></i></button>
+                    <button class="icon-button" id="in-page-search-next" type="button" data-in-page-search-action="next" aria-label="下一处匹配" disabled><i data-lucide="chevron-down" aria-hidden="true"></i></button>
+                    <button class="icon-button" id="in-page-search-close" type="button" data-in-page-search-action="close" aria-label="关闭页内查找"><i data-lucide="x" aria-hidden="true"></i></button>
+                </div>
+            </section>
+
             <main class="page" id="page" aria-live="polite">
                 <div class="loading-state" aria-label="正在载入 OpenSpec 内容">
                     <span></span><span></span><span></span>
