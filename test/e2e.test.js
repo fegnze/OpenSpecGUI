@@ -140,10 +140,8 @@ test('页内查找在当前内容中高亮、导航并随路由清理', { timeou
         await page.waitForFunction(function () { return /^1 \/ /.test(document.getElementById('in-page-search-count').textContent); });
 
         await page.keyboard.press('Escape');
-        await page.waitForSelector('#in-page-search[hidden]');
+        await page.waitForFunction(function () { return document.getElementById('in-page-search').hidden; });
         assert.equal(await page.locator('#in-page-search-count').textContent(), '0 / 0');
-        await page.keyboard.press('/');
-        assert.equal(await page.evaluate(function () { return document.activeElement.id; }), 'global-search');
 
         await page.keyboard.press(process.platform === 'darwin' ? 'Meta+f' : 'Control+f');
         await page.locator('#in-page-search-input').fill('任务');

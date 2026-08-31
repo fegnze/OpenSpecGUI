@@ -70,11 +70,15 @@ node --test test/embedded-initiative-app.test.js
 ## 打包
 
 ```bash
-npm run package
+npm run package:mac:arm64
+npm run package:mac:x64
+npm run package:mac
 npm run make
 ```
 
-未签名的 macOS `.app` 与 `.zip` 产物位于 `out/`。签名、公证与自动更新不在首版范围内。
+`npm run package:mac:arm64` 与 `npm run package:mac:x64` 分别构建并验证单一架构；`npm run package:mac`（也是 `npm run package`）依次构建并验证两种 macOS 架构。每次打包都会覆盖同架构的旧输出，且命令仅在目标 `app.asar` 中的生产源码与当前工作区一致时成功。
+
+未签名的 macOS `.app` 位于 `out/OpenSpec GUI-darwin-arm64/OpenSpec GUI.app` 和 `out/OpenSpec GUI-darwin-x64/OpenSpec GUI.app`；执行 `npm run make` 后的 `.zip` 也位于 `out/`。签名、公证与自动更新不在首版范围内。
 
 ## 项目数据
 
