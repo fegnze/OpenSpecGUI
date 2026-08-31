@@ -85,6 +85,64 @@ async function assertFixedSidebarScroll(page, context) {
     });
 }
 
+async function assertSidebarLayoutMode(page, mode, context) {
+    var layout = await page.evaluate(function () {
+        var shell = document.querySelector('.app-shell').getBoundingClientRect();
+        var sidebar = document.querySelector('.sidebar');
+        var workspace = document.querySelector('.workspace');
+        var dragRegion = document.querySelector('.window-drag-region');
+        var sidebarRect = sidebar.getBoundingClientRect();
+        var workspaceRect = workspace.getBoundingClientRect();
+        var dragRegionRect = dragRegion.getBoundingClientRect();
+        var sidebarStyle = getComputedStyle(sidebar);
+        var workspaceStyle = getComputedStyle(workspace);
+        var toolbarStyle = getComputedStyle(document.querySelector('.toolbar'));
+        return {
+            shell: { top: shell.top, left: shell.left, right: shell.right, bottom: shell.bottom },
+            sidebar: { top: sidebarRect.top, left: sidebarRect.left, right: sidebarRect.right, bottom: sidebarRect.bottom },
+            workspace: { top: workspaceRect.top, left: workspaceRect.left, right: workspaceRect.right, bottom: workspaceRect.bottom },
+            dragRegion: { top: dragRegionRect.top, left: dragRegionRect.left, right: dragRegionRect.right, bottom: dragRegionRect.bottom, appRegion: getComputedStyle(dragRegion).webkitAppRegion },
+            sidebarTopLeftRadius: sidebarStyle.borderTopLeftRadius,
+            sidebarTopRightRadius: sidebarStyle.borderTopRightRadius,
+            sidebarBorderWidth: sidebarStyle.borderTopWidth,
+            workspaceTopLeftRadius: workspaceStyle.borderTopLeftRadius,
+            workspaceTopRightRadius: workspaceStyle.borderTopRightRadius,
+            workspaceBorderWidth: workspaceStyle.borderTopWidth,
+            toolbarTopLeftRadius: toolbarStyle.borderTopLeftRadius,
+            toolbarTopRightRadius: toolbarStyle.borderTopRightRadius
+        };
+    });
+
+    if (mode === 'floating') {
+        assert.equal(layout.sidebar.top, layout.shell.top, context + ' 侧栏顶部外沿未收敛至 0px');
+        assert.equal(layout.sidebar.left, layout.shell.left, context + ' 侧栏左侧外沿未收敛至 0px');
+        assert.equal(layout.sidebar.bottom, layout.shell.bottom, context + ' 侧栏底部外沿未收敛至 0px');
+        assert.equal(layout.workspace.top, layout.shell.top, context + ' 工作区不应保留顶部外壳留白');
+        assert.equal(layout.workspace.right, layout.shell.right - 4, context + ' 工作区应保留最小右侧画布露边以显示圆角');
+        assert.equal(layout.sidebar.right, layout.workspace.left - 6, context + ' 侧栏与工作区之间应保留 6px 间距');
+        assert.equal(layout.sidebarTopLeftRadius, '14px', context + ' 侧栏外沿留白后未恢复一致圆角');
+        assert.equal(layout.sidebarTopRightRadius, '14px', context + ' 侧栏朝工作区的一侧未使用一致圆角');
+        assert.equal(layout.sidebarBorderWidth, '1px', context + ' 侧栏缺少悬浮面板边界');
+        assert.equal(layout.workspaceTopLeftRadius, '14px', context + ' 工作区未与侧栏使用一致圆角');
+        assert.equal(layout.workspaceTopRightRadius, '14px', context + ' 工作区右侧未使用一致圆角');
+        assert.equal(layout.workspaceBorderWidth, '0px', context + ' 工作区不应引入厚重卡片边框');
+        assert.equal(layout.toolbarTopLeftRadius, '14px', context + ' 工作区顶栏左侧未使用一致圆角');
+        assert.equal(layout.toolbarTopRightRadius, '14px', context + ' 工作区顶栏右侧未使用一致圆角');
+        assert.equal(layout.dragRegion.appRegion, 'drag', context + ' 标题栏拖拽区未启用');
+        assert.equal(layout.dragRegion.top, layout.shell.top, context + ' 标题栏拖拽区未贴合窗口顶部');
+        assert.ok(layout.dragRegion.left >= 104, context + ' 标题栏拖拽区覆盖了原生窗口控制按钮');
+        assert.ok(layout.dragRegion.right <= layout.sidebar.right, context + ' 标题栏拖拽区覆盖了工作区交互');
+        return;
+    }
+
+    assert.equal(layout.sidebar.top, layout.shell.top, context + ' 紧凑侧栏不应保留宽桌面外边距');
+    assert.equal(layout.sidebar.left, layout.shell.left, context + ' 紧凑侧栏不应偏离窗口边缘');
+    assert.equal(layout.sidebarTopLeftRadius, '0px', context + ' 紧凑侧栏不应保留悬浮圆角');
+    assert.equal(layout.sidebarBorderWidth, '0px', context + ' 紧凑侧栏不应保留悬浮面板边界');
+    assert.equal(layout.toolbarTopLeftRadius, '0px', context + ' 紧凑顶栏不应保留宽桌面圆角');
+    assert.equal(layout.toolbarTopRightRadius, '0px', context + ' 紧凑顶栏不应保留宽桌面圆角');
+}
+
 async function readClipboard(electronApp) {
     return electronApp.evaluate(function (electron) { return electron.clipboard.readText(); });
 }
@@ -390,6 +448,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         await page.waitForSelector('.initiative-artifact-reader .markdown-body');
         assert.match(await page.evaluate(function () { return window.location.hash; }), /artifact=release-summary/);
         await page.setViewportSize({ width: 820, height: 640 });
+        await page.evaluate(function () { document.querySelector('.workspace').scrollTop = 0; });
         await uiHelpers.assertNoPageOverflow(page, '820x640 Initiative 详情');
         await uiHelpers.assertNoControlOverlap(page, '820x640 Initiative 详情');
         await uiHelpers.assertNoSeriousA11yViolations(page, '820x640 Initiative 详情');
@@ -413,6 +472,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         assert.equal(await readClipboard(electronApp), 'modern-console');
         assert.equal(await page.evaluate(function () { return window.location.hash; }), taskDetailHash);
         await page.setViewportSize({ width: 1440, height: 640 });
+        await assertSidebarLayoutMode(page, 'floating', '宽桌面提案详情');
         await assertFixedSidebarScroll(page, '宽桌面提案详情');
         await page.setViewportSize({ width: 1440, height: 930 });
         await uiHelpers.assertNoSeriousA11yViolations(page, '提案详情');
@@ -426,6 +486,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         assert.equal(await page.evaluate(function () { return document.activeElement && document.activeElement.id; }), 'task-24');
         await page.screenshot({ path: path.join(artifacts, 'desktop-task-detail.png'), fullPage: true });
         await page.setViewportSize({ width: 1180, height: 760 });
+        await assertSidebarLayoutMode(page, 'floating', '紧凑桌面提案详情');
         await assertFixedSidebarScroll(page, '紧凑桌面提案详情');
         await uiHelpers.assertNoPageOverflow(page, '紧凑桌面提案详情');
         await uiHelpers.assertNoControlOverlap(page, '紧凑桌面提案详情');
@@ -446,6 +507,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
             electron.BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(factor);
         }, 1);
         await page.setViewportSize({ width: 820, height: 640 });
+        await assertSidebarLayoutMode(page, 'compact', '最小窗口提案详情');
         await assertFixedSidebarScroll(page, '最小窗口提案详情');
         await uiHelpers.assertNoPageOverflow(page, '最小窗口提案详情');
         await uiHelpers.assertNoControlOverlap(page, '最小窗口提案详情');

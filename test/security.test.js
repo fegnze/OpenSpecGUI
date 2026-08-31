@@ -46,9 +46,12 @@ test('renderer 不使用 HTTP transport 或直接 Node 能力', async function (
 test('隐藏标题栏提供拖动区域且不吞掉控件交互', async function () {
     var main = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'main', 'index.js'), 'utf8');
     var styles = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'renderer', 'styles.css'), 'utf8');
+    var html = await fsPromises.readFile(path.resolve(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
 
     assert.match(main, /titleBarStyle:.*hiddenInset/);
     assert.match(styles, /\.sidebar,\s*\.toolbar\s*\{\s*-webkit-app-region:\s*drag;/);
+    assert.match(html, /<div class="window-drag-region" aria-hidden="true"><\/div>/);
+    assert.match(styles, /\.window-drag-region\s*\{\s*-webkit-app-region:\s*drag;/);
     assert.match(styles, /\.toolbar label\s*\{\s*-webkit-app-region:\s*no-drag;/);
 });
 
