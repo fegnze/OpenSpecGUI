@@ -4,4 +4,4 @@ out/
 *.log
 coverage/
 .openspec-gui-test-data/
-artifacts/visual-results/
+/artifacts/
