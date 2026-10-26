@@ -12,6 +12,7 @@
     <script defer src="progress.js"></script>
     <script defer src="host-router.js"></script>
     <script defer src="initiative-app-host.js"></script>
+    <script defer src="change-archive.js"></script>
     <script defer src="app.js"></script>
 </head>
 <body>
@@ -110,6 +111,7 @@
                 </div>
             </section>
 
+            <aside class="archive-recovery-summary" id="archive-recovery-summary" aria-label="归档恢复状态" role="alert" hidden></aside>
             <main class="page" id="page" aria-live="polite">
                 <div class="loading-state" aria-label="正在载入 OpenSpec 内容">
                     <span></span><span></span><span></span>
@@ -119,6 +121,21 @@
         <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     </div>
 
+    <dialog class="archive-dialog" id="archive-dialog" aria-labelledby="archive-dialog-title" aria-describedby="archive-dialog-identity">
+        <header>
+            <div><h2 id="archive-dialog-title">审阅归档</h2><p id="archive-dialog-identity"></p></div>
+            <button class="icon-button" id="archive-close" type="button" aria-label="关闭归档预览"><i data-lucide="x" aria-hidden="true"></i></button>
+        </header>
+        <div class="archive-dialog-body" id="archive-dialog-body"></div>
+        <footer>
+            <p id="archive-dialog-status" role="status" aria-live="polite"></p>
+            <div class="archive-dialog-actions">
+                <button class="secondary-command" id="archive-cancel" type="button">取消</button>
+                <button class="secondary-command" id="archive-retry" type="button" hidden>重新检查</button>
+                <button class="primary-command" id="archive-confirm" type="button" hidden>归档</button>
+            </div>
+        </footer>
+    </dialog>
     <dialog class="project-dialog" id="project-dialog" aria-labelledby="project-dialog-title">
         <header>
             <div>

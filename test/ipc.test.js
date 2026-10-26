@@ -30,6 +30,7 @@ test('IPC 只注册白名单操作并校验项目和文档输入', async functio
         });
 
         assert.deepEqual(Array.from(handlers.keys()).sort(), [
+            'changes:commit-archive', 'changes:discard-archive', 'changes:prepare-archive',
             'clipboard:write', 'documents:read', 'initiatives:load', 'initiatives:read-artifact',
             'projects:add', 'projects:list', 'projects:relink',
             'projects:remove', 'projects:scan', 'projects:select', 'workspace:check-updates',
@@ -70,4 +71,35 @@ test('IPC 只注册白名单操作并校验项目和文档输入', async functio
         await fixture.cleanup();
         await fsPromises.rm(dataRoot, { recursive: true, force: true });
     }
+});
+
+test('归档 IPC 校验宿主主框架、计划身份和警告，拒绝任意路径及命令', async function () {
+    var handlers = new Map();
+    var sender = { mainFrame: {} };
+    var event = { sender: sender, senderFrame: sender.mainFrame };
+    var calls = [];
+    var request = { projectId: '12345678-1234-4123-8123-123456789abc', revision: 3, changeId: 'add-example' };
+    registerIpc({
+        ipcMain: { handle: function (name, handler) { handlers.set(name, handler); } },
+        dialog: {}, clipboard: {},
+        windowProvider: function () { return { webContents: sender }; },
+        service: {
+            prepareArchive: function (value) { calls.push(value); return value; },
+            commitArchive: function (value) { calls.push(value); return value; },
+            discardArchive: function (value) { return value; }
+        }
+    });
+    assert.throws(function () { handlers.get('changes:prepare-archive')({ sender: {} }, request); }, /来源无效/);
+    assert.throws(function () { handlers.get('changes:prepare-archive')({ sender: sender, senderFrame: {} }, request); }, /来源无效/);
+    assert.throws(function () { handlers.get('changes:prepare-archive')(event, Object.assign({}, request, { path: '/outside' })); }, /未支持字段/);
+    assert.throws(function () { handlers.get('changes:prepare-archive')(event, Object.assign({}, request, { command: 'anything' })); }, /未支持字段/);
+    assert.throws(function () { handlers.get('changes:prepare-archive')(event, Object.assign({}, request, { changeId: '../other' })); }, /格式无效/);
+    assert.throws(function () { handlers.get('changes:prepare-archive')(event, Object.assign({}, request, { revision: -1 })); }, /revision/);
+    handlers.get('changes:prepare-archive')(event, request);
+    var commit = { projectId: request.projectId, revision: 3, planId: 'a'.repeat(48), acceptedWarnings: ['tasks:incomplete'] };
+    assert.deepEqual(handlers.get('changes:commit-archive')(event, commit), commit);
+    assert.throws(function () { handlers.get('changes:commit-archive')(event, Object.assign({}, commit, { content: 'injected' })); }, /未支持字段/);
+    assert.throws(function () { handlers.get('changes:commit-archive')(event, Object.assign({}, commit, { acceptedWarnings: ['x'.repeat(70000)] })); }, /payload 限制/);
+    assert.throws(function () { handlers.get('changes:commit-archive')(event, Object.assign({}, commit, { planId: '../../plan' })); }, /格式无效/);
+    assert.equal(calls.length, 2);
 });

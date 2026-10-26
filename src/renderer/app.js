@@ -65,6 +65,37 @@
     var inPageSearchState = { query: '', matches: [], activeIndex: -1, returnFocus: null };
     var IN_PAGE_SEARCH_HIGHLIGHT = 'openspec-in-page-search';
     var IN_PAGE_SEARCH_CURRENT_HIGHLIGHT = 'openspec-in-page-search-current';
+    var archiveController = new window.OpenSpecArchiveController({
+        bridge: bridge,
+        getContext: function () { return { projectId: state.projectId, revision: state.revision, projectName: state.snapshot ? state.snapshot.project.name : '', archiveRecovery: state.archiveRecovery || [] }; },
+        setBusy: function (busy) { [projectPickerButton, projectManageButton, toolbarProjectButton, refreshButton].forEach(function (button) { button.disabled = busy; }); },
+        onSuccess: async function (result) {
+            state.view = 'archives';
+            state.entityId = '';
+            state.query = '';
+            await loadWorkspace(false);
+            setDetail('archive', result.archivedAs);
+            showToast((result.specsUpdated ? '规范已同步，归档完成' : '归档完成') + (result.warnings.length ? ' · 已接受 ' + result.warnings.length + ' 项提示' : ''));
+        },
+        onFailure: function () { return loadWorkspace(false); }
+    });
+
+    function appendArchiveAction(entity) {
+        if (entity.type !== 'active' || !bridge.changes) { return; }
+        var tabs = page.querySelector('.detail-tabs');
+        if (!tabs) { return; }
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'detail-archive-action';
+        button.setAttribute('data-action', 'archive-change');
+        button.innerHTML = icon('archive', 15) + '<span>归档…</span>';
+        button.title = '检查并预览归档结果';
+        tabs.append(button);
+        if (entity.controlState === 'ready-to-archive') {
+            var badge = page.querySelector('.control-badge');
+            if (badge) { badge.title = '任务已完成，归档前仍需检查规范并确认验收'; }
+        }
+    }
 
     function canUseCssHighlights() {
         return Boolean(window.CSS && window.CSS.highlights && typeof window.CSS.highlights.set === 'function' && typeof window.Highlight === 'function');
@@ -886,6 +917,8 @@
         var warningContext = renderWarnings(entity.warnings);
         page.innerHTML = '<button class="back-button" type="button" data-route="overview">' + icon('arrow-left', 16) + '返回执行台</button><header class="change-detail-header"><div class="change-identity"><div class="change-state-line">' + controlBadge(entity.controlState) + '<span class="entity-id">' + escapeHtml(entity.id) + '</span>' + proposalCopyButton(entity.id, 'detail-copy-button') + '</div><h1>' + escapeHtml(entity.title) + '</h1></div><div class="detail-score"><strong>' + entity.tasks.percent + '%</strong><span>' + entity.tasks.completed + ' / ' + entity.tasks.total + ' tasks</span>' + progressHtml(entity.tasks, entity.title + ' 总体任务进度') + '</div></header><nav class="detail-tabs" aria-label="提案详情视图"><button type="button" data-panel="tasks" aria-current="page">' + icon('list-checks', 16) + '任务执行</button><button type="button" data-panel="documents">' + icon('files', 16) + '上下文文档</button></nav><section class="next-action-banner current-task-focus is-' + entity.controlState + '"><span class="next-action-icon">' + icon(entity.nextTask ? 'play' : controlIcon(entity.controlState), 19) + '</span><span><small>' + (entity.nextTask ? '当前任务' : '执行状态') + '</small><strong>' + currentTask + '</strong>' + (entity.nextTask ? '<em>' + escapeHtml(entity.nextTask.groupTitle) + ' · 剩余 ' + entity.remainingTasks + ' 项</em>' : '') + '</span>' + locateAction + '</section><div class="change-detail-layout"><main class="task-execution"><div class="panel-heading"><div><h2>任务阶段</h2><span>按 tasks.md 顺序</span></div><span class="task-total">' + entity.tasks.total + ' tasks</span></div>' + (groups.length ? groups.map(function (group) { return taskGroup(group, entity); }).join('') : '<div class="empty-state compact-task-state">' + icon('list-x', 24) + '<h2>还没有任务清单</h2><p>可继续查看已有规划文档和诊断信息。</p></div>') + '</main><aside class="context-rail"><details class="context-panel" open><summary>' + icon('panel-right', 15) + '<span>次级上下文</span><small>' + entity.documents.length + ' 个文档</small></summary><div class="context-panel-body">' + warningContext + '<section><h2>规划文档</h2><div class="context-document-list">' + entity.documents.map(contextDocumentButton).join('') + '</div></section><section class="source-panel"><span>状态来源</span><strong>' + (entity.statusSource === 'cli' ? 'OpenSpec CLI' : '文件推断') + '</strong><small>更新于 ' + formatDate(entity.modifiedAt) + '</small></section></div></details></aside></div>';
         refreshIcons();
+        appendArchiveAction(entity);
+        refreshIcons();
         if (state.targetTask) {
             var target = document.getElementById('task-' + slugify(state.targetTask));
             if (target) {
@@ -908,6 +941,8 @@
         var meta = entity.tasks ? controlBadge(entity.controlState) + '<span class="entity-id">' + entity.tasks.completed + ' / ' + entity.tasks.total + ' tasks</span>' : '<span class="type-chip">正式规范</span><span class="entity-id">' + entity.requirements + ' Requirements · ' + entity.scenarios + ' Scenarios</span>';
         var copyProposalAction = entity.type === 'spec' ? '' : proposalCopyButton(entity.id, 'detail-copy-button');
         page.innerHTML = '<button class="back-button" type="button" data-route="' + backView + '">' + icon('arrow-left', 16) + '返回' + (backView === 'overview' ? '执行台' : (backView === 'archives' ? '归档' : '规范')) + '</button><header class="document-detail-header"><div><span class="project-context">' + escapeHtml(typeLabel(entity.type)) + '</span><h1>' + escapeHtml(entity.title) + '</h1><div class="detail-meta">' + meta + '<span class="entity-id">' + escapeHtml(entity.id) + '</span>' + copyProposalAction + '</div></div></header>' + (entity.type === 'active' ? '<nav class="detail-tabs" aria-label="提案详情视图"><button type="button" data-panel="tasks">' + icon('list-checks', 16) + '任务执行</button><button type="button" data-panel="documents" aria-current="page">' + icon('files', 16) + '上下文文档</button></nav>' : '') + '<div class="document-bar"><div class="document-tabs" role="tablist" aria-label="文档类型">' + tabs + '</div><div class="document-actions"><div class="segmented-control" aria-label="文档视图"><button class="segment-button" type="button" data-mode="rendered" aria-pressed="' + (state.documentMode === 'rendered') + '">阅读</button><button class="segment-button" type="button" data-mode="raw" aria-pressed="' + (state.documentMode === 'raw') + '">原文</button></div><button class="icon-text-button" type="button" data-action="copy-path" data-tooltip="复制项目相对路径" aria-label="复制项目相对路径">' + icon('copy', 15) + '<span>复制路径</span></button></div></div><div id="document-container"><div class="loading-state" aria-label="正在读取文档"><span></span><span></span><span></span></div></div>';
+        refreshIcons();
+        appendArchiveAction(entity);
         refreshIcons();
         if (state.documentId) { loadDocument(entity, state.documentId); }
     }
@@ -1045,6 +1080,8 @@
             state.projectId = payload.projectId;
             state.revision = payload.revision;
             state.snapshot = payload.snapshot;
+            state.archiveRecovery = payload.archiveRecovery || [];
+            archiveController.contextChanged({ projectId: payload.projectId, revision: payload.revision, archiveRecovery: state.archiveRecovery });
             if (!payload.snapshot) {
                 document.title = 'OpenSpec GUI';
                 sidebarStatus.innerHTML = '<div class="source-line is-inferred"><span class="source-dot"></span><span>等待项目</span></div><small>只读模式</small>';
@@ -1322,6 +1359,7 @@
         }
         if (actionButton) {
             var action = actionButton.getAttribute('data-action');
+            if (action === 'archive-change') { archiveController.open(state.entityId, actionButton); return; }
             if (action === 'copy-proposal-name') { copyProposalName(actionButton.getAttribute('data-proposal-name') || '', actionButton); return; }
             if (action === 'refresh') { loadWorkspace(true); return; }
             if (action === 'copy-path') { copyDocumentPath(); return; }

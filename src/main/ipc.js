@@ -167,6 +167,23 @@ function normalizeDocumentRequest(request) {
     };
 }
 
+function normalizeArchiveRequest(request, mode) {
+    var keys = ['projectId', 'revision', mode === 'prepare' ? 'changeId' : 'planId'];
+    if (mode === 'commit') { keys.push('acceptedWarnings'); }
+    var value = requestObject(request, keys, '归档请求');
+    if (!Number.isSafeInteger(value.revision) || value.revision < 0) { throw new Error('工作区 revision 无效'); }
+    var normalized = { projectId: requireString(value.projectId, '项目 ID', 36, PROJECT_ID_PATTERN), revision: value.revision };
+    if (mode === 'prepare') {
+        normalized.changeId = requireString(value.changeId, 'Change ID', 200, /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/);
+        if (normalized.changeId === 'archive') { throw new Error('Change ID 无效'); }
+    } else { normalized.planId = requireString(value.planId, '归档计划 ID', 48, /^[a-f0-9]{48}$/); }
+    if (mode === 'commit') {
+        if (!Array.isArray(value.acceptedWarnings) || value.acceptedWarnings.length > 256) { throw new Error('归档警告确认无效'); }
+        normalized.acceptedWarnings = value.acceptedWarnings.map(function (id) { return requireString(id, '警告 ID', 160, /^[a-zA-Z0-9:._-]+$/); });
+    }
+    return normalized;
+}
+
 function registerIpc(options) {
     var ipcMain = options.ipcMain;
     var dialog = options.dialog;
@@ -177,7 +194,7 @@ function registerIpc(options) {
 
     function assertTrustedRenderer(event) {
         var window = windowProvider();
-        if (!window || window.isDestroyed && window.isDestroyed() || !event || event.sender !== window.webContents) {
+        if (!window || window.isDestroyed && window.isDestroyed() || !event || event.sender !== window.webContents || window.webContents.mainFrame && event.senderFrame !== window.webContents.mainFrame) {
             throw new Error('IPC 调用来源无效');
         }
     }
@@ -258,6 +275,19 @@ function registerIpc(options) {
 
     ipcMain.handle('documents:read', function (event, request) {
         return service.readDocument(normalizeDocumentRequest(request));
+    });
+
+    ipcMain.handle('changes:prepare-archive', function (event, request) {
+        assertTrustedRenderer(event);
+        return service.prepareArchive(normalizeArchiveRequest(request, 'prepare'));
+    });
+    ipcMain.handle('changes:commit-archive', function (event, request) {
+        assertTrustedRenderer(event);
+        return service.commitArchive(normalizeArchiveRequest(request, 'commit'));
+    });
+    ipcMain.handle('changes:discard-archive', function (event, request) {
+        assertTrustedRenderer(event);
+        return service.discardArchive(normalizeArchiveRequest(request, 'discard'));
     });
 
     ipcMain.handle('initiatives:load', function (event, request) {

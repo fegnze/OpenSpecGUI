@@ -26,6 +26,11 @@ contextBridge.exposeInMainWorld('openSpecGUI', Object.freeze({
             return function () { ipcRenderer.removeListener('workspace:changed', listener); };
         }
     }),
+    changes: Object.freeze({
+        prepareArchive: function (request) { return invoke('changes:prepare-archive', request); },
+        commitArchive: function (request) { return invoke('changes:commit-archive', request); },
+        discardArchive: function (request) { return invoke('changes:discard-archive', request); }
+    }),
     documents: Object.freeze({
         read: function (request) { return invoke('documents:read', request); }
     }),

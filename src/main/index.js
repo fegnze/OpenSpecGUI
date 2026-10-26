@@ -89,7 +89,9 @@ function createWindow() {
         }
     });
     mainWindow.once('ready-to-show', function () { mainWindow.show(); });
-    mainWindow.on('close', function () {
+    mainWindow.on('close', function (event) {
+        if (service && service.archiveService.busy) { event.preventDefault(); return; }
+        if (service) { service.archiveService.invalidate(); }
         if (embeddedAppHost) { embeddedAppHost.dispose(); }
     });
     mainWindow.on('closed', function () { mainWindow = null; });
@@ -144,6 +146,14 @@ if (!app.requestSingleInstanceLock()) {
             windowProvider: function () { return mainWindow; }
         });
         createWindow();
+
+        app.on('before-quit', function (event) {
+            if (service.archiveService.busy) {
+                event.preventDefault();
+                var pending = Array.from(service.archiveService.plans.values()).filter(function (entry) { return entry.promise; }).map(function (entry) { return entry.promise; });
+                Promise.allSettled(pending).then(function () { app.quit(); });
+            } else { service.archiveService.invalidate(); }
+        });
 
         app.on('activate', function () {
             if (BrowserWindow.getAllWindows().length === 0) {

@@ -5,6 +5,7 @@ var fsPromises = require('node:fs/promises');
 var path = require('node:path');
 var createDefaultInitiativeRegistry = require('../core/initiative-providers').createDefaultInitiativeRegistry;
 var workspaceModule = require('../core/workspace');
+var ChangeArchiveService = require('./change-archive-service').ChangeArchiveService;
 
 var DEFAULT_STAMP_LIMITS = {
     maxDepth: 32,
@@ -128,6 +129,11 @@ function WorkbenchService(registry, options) {
     this.stamp = null;
     this.providerFingerprint = null;
     this.refreshPromise = null;
+    this.registryMutations = 0;
+    this.archiveService = new ChangeArchiveService(Object.assign({
+        recoveryDirectory: path.join(path.dirname(registry.registryPath), 'archive-operations'),
+        cliOptions: this.options.cliOptions || {}
+    }, this.options.archiveOptions || {}));
 }
 
 WorkbenchService.prototype.initialize = async function () {
@@ -136,6 +142,7 @@ WorkbenchService.prototype.initialize = async function () {
 };
 
 WorkbenchService.prototype.invalidate = function () {
+    this.archiveService.invalidate();
     this.revision += 1;
     this.workspace = null;
     this.stamp = null;
@@ -150,9 +157,13 @@ WorkbenchService.prototype.listProjects = function () {
 };
 
 WorkbenchService.prototype.addProjects = async function (paths) {
-    var result = await this.registry.addPaths(paths);
-    this.invalidate();
-    return { added: result, registry: await this.registry.list() };
+    this.assertArchiveIdle();
+    this.registryMutations += 1;
+    try {
+        var result = await this.registry.addPaths(paths);
+        this.invalidate();
+        return { added: result, registry: await this.registry.list() };
+    } finally { this.registryMutations -= 1; }
 };
 
 WorkbenchService.prototype.scanProjects = function (parentPath) {
@@ -160,21 +171,24 @@ WorkbenchService.prototype.scanProjects = function (parentPath) {
 };
 
 WorkbenchService.prototype.selectProject = async function (projectId) {
-    await this.registry.select(projectId);
-    this.invalidate();
-    return this.registry.list();
+    this.assertArchiveIdle();
+    this.registryMutations += 1;
+    try { await this.registry.select(projectId); this.invalidate(); return await this.registry.list(); }
+    finally { this.registryMutations -= 1; }
 };
 
 WorkbenchService.prototype.removeProject = async function (projectId) {
-    await this.registry.remove(projectId);
-    this.invalidate();
-    return this.registry.list();
+    this.assertArchiveIdle();
+    this.registryMutations += 1;
+    try { await this.registry.remove(projectId); this.invalidate(); return await this.registry.list(); }
+    finally { this.registryMutations -= 1; }
 };
 
 WorkbenchService.prototype.relinkProject = async function (projectId, rootPath) {
-    await this.registry.relink(projectId, rootPath);
-    this.invalidate();
-    return this.registry.list();
+    this.assertArchiveIdle();
+    this.registryMutations += 1;
+    try { await this.registry.relink(projectId, rootPath); this.invalidate(); return await this.registry.list(); }
+    finally { this.registryMutations -= 1; }
 };
 
 WorkbenchService.prototype.loadWorkspace = async function (force) {
@@ -182,7 +196,7 @@ WorkbenchService.prototype.loadWorkspace = async function (force) {
     if (!project) {
         return { projectId: null, revision: this.revision, snapshot: null };
     }
-    if (force) {
+    if (force && !this.archiveService.busy) {
         this.invalidate();
     }
     var expectedProjectId = project.id;
@@ -208,11 +222,52 @@ WorkbenchService.prototype.loadWorkspace = async function (force) {
         this.stamp = nextStamp;
         this.providerFingerprint = nextWorkspace.providerFingerprint;
     }
+    var expectedSnapshot = this.workspace.snapshot;
+    var recovery = this.archiveService.busy ? [] : await this.archiveService.recoveries(this.workspace.roots.projectRoot);
+    var finalProject = this.registry.getActive();
+    if (!finalProject || finalProject.id !== expectedProjectId || this.revision !== expectedRevision) { throw codedError('STALE_WORKSPACE', '恢复状态检查期间项目已切换或刷新'); }
     return {
         projectId: expectedProjectId,
         revision: this.revision,
-        snapshot: this.workspace.snapshot
+        snapshot: expectedSnapshot,
+        archiveRecovery: recovery
     };
+};
+
+WorkbenchService.prototype.assertArchiveIdle = function () {
+    if (this.archiveService.busy) { throw codedError('ARCHIVE_BUSY', '归档正在执行，请完成后再切换或修改项目'); }
+};
+
+WorkbenchService.prototype.assertArchiveRequest = function (request) {
+    if (this.registryMutations) { throw codedError('ARCHIVE_BUSY', '项目正在切换或更新，请稍后重新检查'); }
+    var active = this.registry.getActive();
+    if (!active || !this.workspace || request.projectId !== active.id || request.revision !== this.revision) { throw codedError('STALE_WORKSPACE', '工作区已切换或刷新，请重新检查归档'); }
+    return active;
+};
+
+WorkbenchService.prototype.prepareArchive = async function (request) {
+    this.assertArchiveRequest(request);
+    if (!this.workspace.snapshot.changes.some(function (change) { return change.id === request.changeId; })) { throw codedError('ARCHIVE_CHANGE_MISSING', '只能归档当前项目中的活跃变更'); }
+    var root = this.workspace.roots.projectRoot;
+    var result = await this.archiveService.prepare(Object.assign({ root: root }, request));
+    try { this.assertArchiveRequest(request); }
+    catch (error) { this.archiveService.discard({ projectId: request.projectId, revision: request.revision, planId: result.planId }); throw error; }
+    return result;
+};
+
+WorkbenchService.prototype.discardArchive = function (request) { return this.archiveService.discard(request); };
+
+WorkbenchService.prototype.commitArchive = function (request) {
+    var entry = this.archiveService.entry(request);
+    var active = this.registry.getActive();
+    if (!active || active.id !== request.projectId) { throw codedError('STALE_WORKSPACE', '项目已切换，请重新检查归档'); }
+    if (entry.promise) { return entry.promise; }
+    this.assertArchiveRequest(request);
+    var self = this;
+    var result = this.archiveService.commit(request);
+    // Keep the same promise for duplicate IPC submissions, including after refresh.
+    entry.promise = result.finally(function () { self.invalidate(); });
+    return entry.promise;
 };
 
 WorkbenchService.prototype.readDocument = async function (request) {
@@ -333,6 +388,7 @@ WorkbenchService.prototype.checkForUpdates = async function () {
 };
 
 WorkbenchService.prototype.refreshIfChanged = function () {
+    if (this.archiveService.busy) { return Promise.resolve(false); }
     var self = this;
     var project = this.registry.getActive();
     var workspace = this.workspace;
@@ -352,7 +408,7 @@ WorkbenchService.prototype.refreshIfChanged = function () {
             var nextStamp = await computeOpenSpecStamp(project.openspecPath, self.options.workspaceStampOptions);
             var nextProviderFingerprint = await self.initiativeRegistry.fingerprint(workspace.roots);
             var currentProject = self.registry.getActive();
-            if (self.workspace !== workspace || self.revision !== revision || !currentProject || currentProject.id !== project.id) {
+            if (self.archiveService.busy || self.workspace !== workspace || self.revision !== revision || !currentProject || currentProject.id !== project.id) {
                 return false;
             }
             if (nextStamp !== stamp || nextProviderFingerprint !== providerFingerprint) {
@@ -360,7 +416,7 @@ WorkbenchService.prototype.refreshIfChanged = function () {
                 return true;
             }
         } catch (error) {
-            if (self.workspace === workspace && self.revision === revision) {
+            if (!self.archiveService.busy && self.workspace === workspace && self.revision === revision) {
                 self.invalidate();
                 return true;
             }

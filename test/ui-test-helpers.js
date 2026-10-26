@@ -15,9 +15,9 @@ async function launchWorkbench(fixture, options) {
     var applicationArguments = process.env.OPENSPEC_GUI_EXECUTABLE ? [] : [repositoryRoot];
     var environment = Object.assign({}, process.env, {
         OPENSPEC_GUI_USER_DATA: userData,
-        OPENSPEC_GUI_CLI: path.join(fixture.root, 'missing-openspec'),
+        OPENSPEC_GUI_CLI: settings.cli || path.join(fixture.root, 'missing-openspec'),
         OPENSPEC_GUI_TEST_NOW: fixture.fixedNow,
-        PATH: '/usr/bin:/bin',
+        PATH: settings.path || '/usr/bin:/bin',
         ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
     });
     if (settings.trustedFixtureApp === true) {

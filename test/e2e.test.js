@@ -533,7 +533,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         assert.equal(securityState.imageSource, null);
         assert.equal(securityState.imageHandler, null);
         assert.equal(securityState.requireType, 'undefined');
-        assert.deepEqual(securityState.apiKeys, ['clipboard', 'documents', 'initiativeApp', 'initiatives', 'projects', 'workspace']);
+        assert.deepEqual(securityState.apiKeys, ['changes', 'clipboard', 'documents', 'initiativeApp', 'initiatives', 'projects', 'workspace']);
         await uiHelpers.assertNoSeriousA11yViolations(page, '文档阅读');
         await uiHelpers.assertNoPageOverflow(page, '文档阅读');
         await uiHelpers.assertReachable(page, ['[data-panel="tasks"]', '[data-mode="rendered"]', '[data-mode="raw"]', '[data-action="copy-path"]'], '文档阅读');

@@ -755,6 +755,48 @@ mark { background: var(--amber-soft); color: var(--ink); padding: 0 2px; }
     padding: 7px 11px;
 }
 .detail-tabs button[aria-current="page"] { border-bottom-color: var(--blue); color: var(--ink); }
+.detail-tabs .detail-archive-action { margin-left: auto; color: var(--ink); }
+
+.archive-dialog {
+    background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong);
+    border-radius: var(--radius-overlay); box-shadow: 0 24px 80px var(--shadow);
+    padding: 0; width: min(960px, calc(100vw - 48px)); max-width: none;
+    max-height: calc(100dvh - 64px); overflow: hidden;
+}
+.archive-dialog[open] { display: flex; flex-direction: column; }
+.archive-dialog::backdrop { background: rgb(7 12 13 / 58%); backdrop-filter: blur(4px); }
+.archive-dialog > header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 24px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.archive-dialog h2 { margin: 0; font-size: 20px; }
+.archive-dialog header p { color: var(--muted); font: 12px var(--font-mono); margin: 4px 0 0; overflow-wrap: anywhere; }
+.archive-dialog-body { overflow: auto; padding: 20px 24px; min-height: 100px; }
+.archive-dialog h3 { font-size: 15px; margin: 0 0 8px; }
+.archive-dialog-body > * + section, .archive-file-diff, .archive-warnings { margin-top: 20px; }
+.archive-dialog p { margin: 6px 0; }
+.archive-artifacts { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--muted); font-size: 12px; }
+.archive-note { color: var(--muted); font-size: 13px; }
+.archive-path { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.archive-warnings { background: var(--amber-soft); border: 1px solid var(--line); border-radius: var(--radius-control); padding: 12px 16px; min-width: 0; }
+.archive-warnings legend { font-size: 13px; font-weight: 500; }
+.archive-warnings label { align-items: flex-start; display: flex; gap: 10px; padding: 6px 0; font-size: 14px; }
+.archive-warnings input { accent-color: var(--blue); flex-shrink: 0; margin-top: 4px; }
+.archive-file-diff { border: 1px solid var(--line); border-radius: var(--radius-control); overflow: hidden; }
+.archive-file-diff summary { background: var(--surface-muted); font: 12px var(--font-mono); padding: 10px 12px; cursor: pointer; overflow-wrap: anywhere; }
+.archive-diff { font: 12px/1.8 var(--font-mono); margin: 0; padding: 8px 0; overflow: auto; max-height: 360px; color: var(--ink); background: var(--surface); tab-size: 4; }
+.archive-diff-line { display: block; min-width: max-content; min-height: 1.8em; padding: 0 12px; }
+.archive-diff-line.is-added { color: var(--green); background: var(--green-soft); }
+.archive-diff-line.is-removed { color: var(--red); background: var(--red-soft); }
+.archive-dialog > footer { flex-shrink: 0; padding: 14px 24px 18px; border-top: 1px solid var(--line); }
+.archive-dialog > footer p { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.archive-dialog > footer [data-state="error"], .archive-error { color: var(--red); white-space: pre-wrap; overflow-wrap: anywhere; }
+.archive-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.archive-dialog-actions button { white-space: nowrap; }
+.archive-dialog [hidden] { display: none !important; }
+.archive-recovery-summary { background: var(--amber-soft); border: 1px solid var(--line); margin: 12px 24px 0; padding: 12px 16px; border-radius: var(--radius-control); }
+.archive-recovery-summary p { margin: 6px 0; font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+    .archive-dialog { width: calc(100vw - 32px); max-height: calc(100dvh - 32px); }
+    .archive-dialog > header, .archive-dialog-body, .archive-dialog > footer { padding-left: 16px; padding-right: 16px; }
+}
 
 .next-action-banner {
     align-items: center;
