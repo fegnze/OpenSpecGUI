@@ -39,3 +39,17 @@
 - 不解释自然语言项目规则，不判断实现是否验收，不支持批量归档或撤销成功归档。
 - 不承诺跨文件事务原子性或控制外部编辑器；遇到外部写入冲突时保留内容并呈现恢复状态。
 - 未执行当前仓库 Change 的真实归档；本变更保留为完成实现、等待用户验收的活跃 Change。
+
+## Finder 启动的 CLI 发现修复
+
+2026-10-26 复现：本机已有 OpenSpec CLI 1.8.0，但 `PATH=/usr/bin:/bin` 时只查项目 CLI 和 PATH，未发现 nvm 全局安装，归档返回 `ARCHIVE_CLI_UNAVAILABLE`，状态查询也回退为文件推断。
+
+查询与归档现共用命令及 Node 运行时解析，增加 nvm、Homebrew 和常见用户目录回退；保留项目、显式配置、随应用提供的 CLI 和 PATH 的优先级。不执行 shell 初始化脚本。Node 脚本优先使用 CLI 同目录的 Node，没有独立 Node 时使用 Electron 的显式 Node 模式。
+
+- `npm test`：117 项通过，0 失败，0 跳过；新增全局 nvm 发现、多个版本排序、Node 配对、项目与显式配置优先级测试。
+- `npm run check`：50 个 JS 文件通过；`git diff --check` 和变更严格校验通过。
+- arm64 打包版归档端到端：4 项通过，包括仅有系统 PATH、nvm 全局 CLI 且没有独立 Node 时的状态查询与完整差异预览。
+- arm64 包内 29 个生产源码文件与工作区一致。使用既有 Electron 43.4.1 离线 ZIP 和相同 Forge 打包配置生成构建；临时输出目录位于 `out/` 子目录时，额外显式排除整个 `out/`，避免旧构建进入分发包。
+- 本项目在 `PATH=/usr/bin:/bin` 下的真实预检成功，返回 `needs-sync` 及 `change-archive`、`desktop-workbench` 两份规范差异；只运行临时快照预演，未提交本项目归档。
+
+端到端夹具使用独立 HOME 和不兼容 CLI，避免主机已有的全局 CLI 使降级测试失真。修复仅更新 arm64 构建，x64 构建未验证。
