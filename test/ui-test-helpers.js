@@ -13,11 +13,20 @@ async function launchWorkbench(fixture, options) {
     var userData = path.join(fixture.root, settings.userDataName || 'user-data');
     var electronExecutable = process.env.OPENSPEC_GUI_EXECUTABLE || require('electron');
     var applicationArguments = process.env.OPENSPEC_GUI_EXECUTABLE ? [] : [repositoryRoot];
+    var unsupportedCli = path.join(fixture.root, 'unsupported-openspec.js');
+    if (!settings.cli && !settings.discoverCLI) {
+        // Keep the fallback tests independent of CLIs installed on the host.
+        fs.writeFileSync(unsupportedCli, '#!/usr/bin/env node\nconsole.error("Unsupported OpenSpec CLI");process.exit(1);\n', { mode: 493 });
+    }
     var environment = Object.assign({}, process.env, {
         OPENSPEC_GUI_USER_DATA: userData,
-        OPENSPEC_GUI_CLI: settings.cli || path.join(fixture.root, 'missing-openspec'),
+        OPENSPEC_GUI_CLI: settings.cli || (settings.discoverCLI ? '' : unsupportedCli),
         OPENSPEC_GUI_TEST_NOW: fixture.fixedNow,
         PATH: settings.path || '/usr/bin:/bin',
+        HOME: fixture.root,
+        NVM_DIR: settings.nvmDirectory || path.join(fixture.root, '.nvm'),
+        NVM_BIN: '',
+        VOLTA_HOME: path.join(fixture.root, '.volta'),
         ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
     });
     if (settings.trustedFixtureApp === true) {

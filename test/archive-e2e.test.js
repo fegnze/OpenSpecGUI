@@ -107,3 +107,24 @@ test('Electron 使用自身 Node 运行时支持 Finder 环境中的项目本地
         await assert.rejects(fs.stat(path.join(fixture.root, fixture.source)), { code: 'ENOENT' });
     } finally { if (launched) { await launched.electronApp.close(); } await fixture.cleanup(); }
 });
+
+test('Electron 在 Finder PATH 下发现 nvm 全局 CLI 并生成归档预览', { timeout: 45000 }, async function () {
+    var fixture = await createFixture();
+    var launched;
+    try {
+        var nvmDirectory = path.join(fixture.base, '.nvm');
+        var bin = path.join(nvmDirectory, 'versions/node/v22.20.0/bin');
+        await fs.mkdir(bin, { recursive: true });
+        await fs.symlink(fixture.cli, path.join(bin, 'openspec'));
+        // No standalone Node: both status and archive must use Electron's runtime.
+        launched = await openFixture(fixture, { nvmDirectory: nvmDirectory, discoverCLI: true });
+        assert.equal(await launched.page.locator('.source-panel strong').textContent(), 'OpenSpec CLI');
+        await launched.page.locator('[data-action="archive-change"]').click();
+        await launched.page.waitForSelector('#archive-confirm:not([hidden])');
+        assert.match(await launched.page.locator('#archive-dialog-body').textContent(), /New state/);
+        assert.equal(await launched.page.locator('#archive-confirm').textContent(), '同步规范并归档');
+        await launched.page.locator('#archive-cancel').click();
+        assert.equal(await fs.readFile(path.join(fixture.root, 'openspec/specs/example/spec.md'), 'utf8'), fixture.main);
+        await fs.stat(path.join(fixture.root, fixture.source));
+    } finally { if (launched) { await launched.electronApp.close(); } await fixture.cleanup(); }
+});

@@ -4,16 +4,7 @@ var childProcess = require('node:child_process');
 var fs = require('node:fs/promises');
 var path = require('node:path');
 var files = require('./archive-files');
-var resolveCommands = require('./openspec-cli').resolveCommands;
-
-async function executable(command) {
-    var candidates = path.isAbsolute(command) || command.includes(path.sep) ? [path.resolve(command)] : (process.env.PATH || '').split(path.delimiter).filter(Boolean).map(function (directory) { return path.join(directory, command); });
-    for (var candidate of candidates) {
-        try { await fs.access(candidate, 1); return await fs.realpath(candidate); }
-        catch (error) { if (error.code !== 'ENOENT' && error.code !== 'EACCES') { throw error; } }
-    }
-    return null;
-}
+var openspecCli = require('./openspec-cli');
 
 async function identity(cli) {
     var parts = [];
@@ -32,20 +23,12 @@ async function identity(cli) {
 }
 
 async function resolve(projectRoot, options) {
-    for (var command of resolveCommands(projectRoot, options)) {
-        var entry = await executable(command);
-        if (!entry) { continue; }
-        var cli = { command: entry, args: [], identityFiles: [entry], packageRoot: null };
-        var header = (await fs.readFile(entry)).subarray(0, 200).toString();
-        if (/^#![^\n]*\bnode\b/.test(header) || /\.[cm]?js$/i.test(entry)) {
-            // Finder-launched apps often have no Node on PATH. Electron also
-            // provides a Node runtime; use it only in its explicit Node mode.
-            var runtime = await executable('node') || process.execPath;
-            cli.command = runtime;
-            cli.args = [entry];
-            cli.electronRuntime = Boolean(process.versions.electron && runtime === process.execPath);
-            cli.identityFiles.push(runtime);
-            var directory = path.dirname(entry);
+    for (var command of openspecCli.resolveCommands(projectRoot, options)) {
+        var cli = await openspecCli.resolveInvocation(command);
+        if (!cli) { continue; }
+        cli.packageRoot = null;
+        if (cli.args.length) {
+            var directory = path.dirname(cli.entry);
             for (var index = 0; index < 4; index += 1) {
                 try {
                     var metadata = JSON.parse(await fs.readFile(path.join(directory, 'package.json'), 'utf8'));
