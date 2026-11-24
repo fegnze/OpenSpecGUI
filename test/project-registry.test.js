@@ -1,6 +1,7 @@
 'use strict';
 
 var assert = require('node:assert/strict');
+var execFileSync = require('node:child_process').execFileSync;
 var fsPromises = require('node:fs/promises');
 var os = require('node:os');
 var path = require('node:path');
@@ -71,6 +72,49 @@ test('加载历史注册记录时使用项目目录原名', async function () {
         assert.equal((await registry.list()).projects[0].name, 'sample-project');
     } finally {
         await fsPromises.rm(root, { recursive: true, force: true });
+    }
+});
+
+test('普通 Git 和 linked worktree 分别登记，恢复后可随检出内容切换 OpenSpec 状态', async function () {
+    var base = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'workbench-git-'));
+    var repository = path.join(base, 'main tree');
+    var linked = path.join(base, 'linked tree');
+    var alias = path.join(base, 'alias');
+    var registryFile = path.join(base, 'userdata', 'projects.json');
+    var registry = new ProjectRegistry(registryFile);
+    try {
+        execFileSync('git', ['init', '-q', repository]);
+        execFileSync('git', ['-C', repository, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgSign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'initial', '--allow-empty']);
+        execFileSync('git', ['-C', repository, '-c', 'core.hooksPath=/dev/null', 'worktree', 'add', '--quiet', '--detach', linked, 'HEAD']);
+        await fsPromises.symlink(repository, alias);
+        var invalid = path.join(base, 'invalid');
+        await fsPromises.mkdir(invalid);
+        await fsPromises.writeFile(path.join(invalid, '.git'), 'not a gitdir pointer\n');
+        await registry.load();
+        assert.deepEqual((await registry.scan(base)).map(function (item) { return item.name; }), ['linked tree', 'main tree']);
+        await assert.rejects(registry.addPath(invalid), /Git 工作树根目录/);
+
+        var first = await registry.addPath(repository);
+        assert.equal(first.openspecPath, null);
+        assert.equal((await registry.addPath(alias)).id, first.id);
+        var second = await registry.addPath(linked);
+        assert.notEqual(second.id, first.id);
+
+        registry = new ProjectRegistry(registryFile);
+        await registry.load();
+        assert.equal(registry.getActive().id, second.id);
+        assert.equal((await registry.list()).projects.length, 2);
+        var openSpec = path.join(linked, 'openspec');
+        await fsPromises.mkdir(openSpec);
+        var present = await registry.select(second.id);
+        assert.equal(present.openspecPath, await fsPromises.realpath(openSpec));
+        await fsPromises.rmdir(openSpec);
+        var plain = (await registry.list()).projects.find(function (project) { return project.id === second.id; });
+        assert.equal(plain.valid, true);
+        assert.equal(plain.openspecPath, null);
+        assert.equal((await registry.select(second.id)).openspecPath, null);
+    } finally {
+        await fsPromises.rm(base, { recursive: true, force: true });
     }
 });
 

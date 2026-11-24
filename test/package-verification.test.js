@@ -12,7 +12,7 @@ var verifier = require('../scripts/verify-package');
 async function createFixturePackage() {
     var projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'openspec-gui-package-source-'));
     var outputRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'openspec-gui-package-output-'));
-    var appPath = path.join(outputRoot, 'OpenSpec GUI-darwin-arm64', 'OpenSpec GUI.app');
+    var appPath = path.join(outputRoot, 'Agent Workbench-darwin-arm64', 'Agent Workbench.app');
     var asarPath = path.join(appPath, 'Contents', 'Resources', 'app.asar');
 
     await fsPromises.mkdir(path.join(projectRoot, 'src', 'main'), { recursive: true });

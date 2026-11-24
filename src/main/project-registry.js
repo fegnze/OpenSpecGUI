@@ -26,7 +26,8 @@ function normalizeRegistry(value) {
     }
 
     var projects = value.projects.filter(function (project) {
-        return isPlainObject(project) && typeof project.id === 'string' && typeof project.rootPath === 'string' && typeof project.openspecPath === 'string';
+        return isPlainObject(project) && typeof project.id === 'string' && typeof project.rootPath === 'string' &&
+            (project.openspecPath === null || typeof project.openspecPath === 'string');
     }).map(function (project) {
         return {
             id: project.id,
@@ -55,6 +56,73 @@ async function pathIsReadableDirectory(targetPath) {
     }
 }
 
+/**
+ * 只读取 Git 工作树定位文件的短文本，不加载仓库配置或运行命令。
+ * @param {string} targetPath 定位文件路径
+ * @returns {Promise<string>} 有效文本或空字符串
+ */
+async function readGitLocation(targetPath) {
+    var limit = 4096;
+    var handle;
+    try {
+        handle = await fsPromises.open(targetPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+        var stat = await handle.stat();
+        if (!stat.isFile() || stat.size > limit) { return ''; }
+        var buffer = Buffer.alloc(limit + 1);
+        var result = await handle.read(buffer, 0, buffer.length, 0);
+        if (result.bytesRead > limit) { return ''; }
+        return buffer.toString('utf8', 0, result.bytesRead).trimEnd();
+    } catch (error) {
+        return '';
+    } finally {
+        if (handle) { await handle.close(); }
+    }
+}
+
+/**
+ * 检查目录自身的 Git 元数据，支持常规仓库和带定位文件的工作树。
+ * @param {string} rootPath 已规范化项目根目录
+ * @returns {Promise<boolean>} 是否具有有效的工作树元数据
+ */
+async function hasGitWorkingTree(rootPath) {
+    var gitPath = path.join(rootPath, '.git');
+    try {
+        var marker = await fsPromises.lstat(gitPath);
+        if (marker.isFile()) {
+            var pointer = /^gitdir: ([^\r\n\0]+)$/.exec(await readGitLocation(gitPath));
+            if (!pointer) { return false; }
+            gitPath = path.resolve(rootPath, pointer[1]);
+        } else if (!marker.isDirectory()) {
+            return false;
+        }
+
+        var head = await readGitLocation(path.join(gitPath, 'HEAD'));
+        if (!/^ref: refs\/[^\r\n\0]+$|^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(head)) { return false; }
+        var common = await readGitLocation(path.join(gitPath, 'commondir'));
+        if (common && /[\r\n\0]/.test(common)) { return false; }
+        return pathIsReadableDirectory(path.resolve(gitPath, common, 'objects'));
+    } catch (error) {
+        return false;
+    }
+}
+
+/**
+ * 解析当前检出中可读且位于项目内的 OpenSpec 目录。
+ * @param {string} rootPath 已规范化项目根目录
+ * @returns {Promise<string|null>} OpenSpec 的真实路径
+ */
+async function findOpenSpecPath(rootPath) {
+    var openspecPath = path.join(rootPath, 'openspec');
+    try {
+        if (!await pathIsReadableDirectory(openspecPath)) { return null; }
+        var realPath = await fsPromises.realpath(openspecPath);
+        var relative = path.relative(rootPath, realPath);
+        return relative && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative) ? realPath : null;
+    } catch (error) {
+        return null;
+    }
+}
+
 async function resolveProject(rootPath) {
     if (typeof rootPath !== 'string' || !rootPath.trim()) {
         throw new Error('项目路径不能为空');
@@ -66,27 +134,27 @@ async function resolveProject(rootPath) {
     }
 
     var realRoot = await fsPromises.realpath(requested);
-    var openspecPath = path.join(realRoot, 'openspec');
-    if (!await pathIsReadableDirectory(openspecPath)) {
-        throw new Error('所选目录中未发现可读取的 openspec/：' + realRoot);
+    var openspecPath = await findOpenSpecPath(realRoot);
+    if (!openspecPath && !await hasGitWorkingTree(realRoot)) {
+        throw new Error('所选目录不是 Git 工作树根目录，也没有可读取的 openspec/：' + realRoot);
     }
 
     return {
         name: path.basename(realRoot),
         rootPath: realRoot,
-        openspecPath: await fsPromises.realpath(openspecPath)
+        openspecPath: openspecPath
     };
 }
 
 async function projectStatus(project) {
     try {
         var resolved = await resolveProject(project.rootPath);
-        if (resolved.openspecPath !== project.openspecPath) {
-            return { valid: false, error: 'OpenSpec 路径已变化，请重新关联' };
+        if (resolved.rootPath !== project.rootPath) {
+            return { valid: false, openspecPath: null, error: '项目根目录已变化，请重新关联' };
         }
-        return { valid: true, error: null };
+        return { valid: true, openspecPath: resolved.openspecPath, error: null };
     } catch (error) {
-        return { valid: false, error: error.message };
+        return { valid: false, openspecPath: null, error: error.message };
     }
 }
 
@@ -159,10 +227,7 @@ ProjectRegistry.prototype.save = async function () {
 ProjectRegistry.prototype.list = async function () {
     var projects = await Promise.all(this.data.projects.map(async function (project) {
         var status = await projectStatus(project);
-        return Object.assign({}, project, {
-            valid: status.valid,
-            error: status.error
-        });
+        return Object.assign({}, project, status);
     }));
 
     return {
@@ -179,6 +244,10 @@ ProjectRegistry.prototype.get = function (projectId) {
 
 ProjectRegistry.prototype.getActive = function () {
     return this.get(this.data.activeProjectId);
+};
+
+ProjectRegistry.prototype.inspect = function (project) {
+    return projectStatus(project);
 };
 
 ProjectRegistry.prototype.findValidFallback = async function () {
@@ -245,14 +314,14 @@ ProjectRegistry.prototype.addPaths = async function (rootPaths) {
 
 ProjectRegistry.prototype.select = async function (projectId) {
     var project = this.get(projectId);
-    var resolved;
     if (!project) {
         throw new Error('项目不存在');
     }
-    resolved = await resolveProject(project.rootPath);
-    if (resolved.openspecPath !== project.openspecPath) {
-        throw new Error('OpenSpec 路径已变化，请重新关联项目');
+    var status = await projectStatus(project);
+    if (!status.valid) {
+        throw new Error(status.error);
     }
+    project.openspecPath = status.openspecPath;
     project.lastOpenedAt = new Date().toISOString();
     this.data.activeProjectId = project.id;
     await this.save();
@@ -317,10 +386,11 @@ ProjectRegistry.prototype.scan = async function (parentPath) {
             continue;
         }
 
-        var hasOpenSpec = entries.some(function (entry) {
-            return entry.name === 'openspec' && entry.isDirectory() && !entry.isSymbolicLink();
+        var hasProjectMarker = entries.some(function (entry) {
+            return (entry.name === 'openspec' && entry.isDirectory()) ||
+                (entry.name === '.git' && (entry.isDirectory() || entry.isFile()));
         });
-        if (hasOpenSpec) {
+        if (hasProjectMarker) {
             try {
                 var resolved = await resolveProject(item.directory);
                 if (!seen.has(resolved.rootPath)) {
@@ -330,7 +400,7 @@ ProjectRegistry.prototype.scan = async function (parentPath) {
                     }));
                 }
             } catch (error) {
-                // A candidate can disappear during a scan; skip it and continue.
+                // 扫描结果允许跳过无效或已消失的候选项。
             }
         }
 

@@ -1,9 +1,9 @@
-# OpenSpec GUI 任务恢复提示词
+# Agent Workbench 任务恢复提示词
 
 在新的 Codex 或 Claude Code 任务中使用下面的提示词，可以从仓库状态恢复上下文，而不依赖原会话记录。
 
 ```text
-请继续实施 /Users/ghost/work/OpenSpecGUI 中的 OpenSpec GUI。
+请在 OpenSpecGUI 仓库中继续实施 Agent Workbench。
 
 开始前：
 1. 读取仓库 AGENTS.md（如存在）和 OpenSpec 本地技能说明。
@@ -21,14 +21,14 @@
 - 项目同时允许独立 OpenSpec Changes、普通 Initiative 与 embedded Initiative App；Initiative 不替代 Change 生命周期。
 - 普通 Initiative 只从 openspec/initiatives/<id>/initiative.yaml 发现并由内置 Generic Provider 解析；独立 App 只通过公开 manifest 协议发现。
 - 独立 App 只从固定深度的 openspec/<collection>/<id>/initiative-app.json 发现；manifest 只能声明基础身份、项目内静态 webRoot、entry 和宿主固定 action ID。
-- 项目不得声明 Provider/App 代码、命令、模块、任意 URL、iframe、网络代理或 IPC method；OpenSpecGUI 不解析消费项目的内部数据模型、实体关系或业务工件。
+- 项目不得声明 Provider/App 代码、命令、模块、任意 URL、iframe、网络代理或 IPC method；工作台不解析消费项目的内部数据模型、实体关系或业务工件。
 - 普通 Initiative 成果继续通过当前 project/revision/provider/initiative/sourceHash/artifactId 的固定 IPC 惰性读取；独立 App 静态内容通过受限 custom protocol 和原生隔离 View 加载。
 - contextIsolation=true、sandbox=true、nodeIntegration=false，权限默认拒绝。
 - 文档路径必须限制在当前项目真实 openspec 根目录内，Markdown 按不可信内容清洗。
 - 首页只展示提案状态，不放跨提案待办列表；进入提案后 tasks 必须是首要内容。
 - 进度固定 10 段并允许末段部分填充，例如 83% = 8 个完整段 + 第 9 段 30%。
 - 界面保持紧凑、现代、正文常规字重和适合中英文长期阅读的字号。
-- 目标项目拥有自己的静态 Dashboard、生成/check/serve 后备与内部测试；OpenSpecGUI 只发现、导航、隔离承载并提供固定 openspec.open-change 动作。
+- 目标项目拥有自己的静态 Dashboard、生成/check/serve 后备与内部测试；工作台只发现、导航、隔离承载并提供固定 openspec.open-change 动作。
 
 实现来源与映射：
 - 旧 workspace.js、markdown.js、openspec-cli.js 已迁移到 src/core。
@@ -45,6 +45,6 @@
 - 从 tasks.md 中第一个未勾选项开始，完成一项就立即勾选。
 - 修改后运行 npm test、npm run check、npm audit、npm run package，并执行 OpenSpec strict validation。
 - UI 变更必须运行 npm run test:e2e 并检查 artifacts 下的桌面与最小窗口截图。
-- Initiative UI 变更还必须运行 npm run test:visual；独立 App 通用边界运行 node --test test/embedded-initiative-app.test.js，并且只使用仓库内合成 fixture。消费项目自行验证其静态应用，不属于 OpenSpec GUI 验收门禁。
+- Initiative UI 变更还必须运行 npm run test:visual；独立 App 通用边界运行 node --test test/embedded-initiative-app.test.js，并且只使用仓库内合成 fixture。消费项目自行验证其静态应用，不属于 Agent Workbench 验收门禁。
 - 所有 tasks 完成后报告状态，等待用户明确要求后再归档 change。
 ```

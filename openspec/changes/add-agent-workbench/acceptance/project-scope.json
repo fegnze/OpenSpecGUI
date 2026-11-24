@@ -1,0 +1,176 @@
+{
+  "date": "2026-11-24",
+  "tasks": [
+    "4.2",
+    "4.3 本机部分"
+  ],
+  "package": {
+    "fromVersion": "0.5.3",
+    "toVersion": "0.5.4",
+    "product": "packaged macOS arm64",
+    "freshInstall": {
+      "emptyProjectRegistry": true,
+      "visibleOnboarding": true
+    },
+    "upgrade": {
+      "registeredWorktrees": 4,
+      "catalogItems": 8,
+      "localAliasPreserved": true,
+      "pinnedBindings": {
+        "spec-main": {
+          "codex": [
+            "portable-paths@1.0.0"
+          ],
+          "claude": [],
+          "dsh": []
+        },
+        "spec-linked": {
+          "codex": [
+            "verify-changes@1.0.0"
+          ],
+          "claude": [],
+          "dsh": []
+        },
+        "plain-main": {
+          "codex": [],
+          "claude": [
+            "task-scope@1.0.0"
+          ],
+          "dsh": []
+        },
+        "plain-linked": {
+          "codex": [],
+          "claude": [],
+          "dsh": [
+            "portable-paths@1.0.0"
+          ]
+        }
+      }
+    },
+    "isolation": {
+      "sourceCommit": "467279854ab73c13ec85676ec06767d978fdab63",
+      "pairedLinkedWorktrees": 2,
+      "unchangedGitStatusAndTreeEntries": true,
+      "trackedAndUntrackedBeforeAfter": {
+        "spec-main": {
+          "gitStatus": "",
+          "entries": 198
+        },
+        "spec-linked": {
+          "gitStatus": "",
+          "entries": 198
+        },
+        "plain-main": {
+          "gitStatus": "",
+          "entries": 1
+        },
+        "plain-linked": {
+          "gitStatus": "",
+          "entries": 1
+        }
+      },
+      "packagedRunnerDecisions": {
+        "spec-main": {
+          "codex": "context",
+          "claude": "skipped",
+          "dsh": "skipped"
+        },
+        "spec-linked": {
+          "codex": "context",
+          "claude": "skipped",
+          "dsh": "skipped"
+        },
+        "plain-main": {
+          "codex": "skipped",
+          "claude": "context",
+          "dsh": "skipped"
+        },
+        "plain-linked": {
+          "codex": "skipped",
+          "claude": "skipped",
+          "dsh": "context"
+        }
+      }
+    }
+  },
+  "legacyMigration": {
+    "source": "constructed schema 1 fixture using a materialized 0.5.3 rule snapshot",
+    "target": "macOS arm64 0.5.4",
+    "schemaAfter": 2,
+    "verified": [
+      "per-project/version binding",
+      "alias",
+      "snapshot bytes",
+      "byte-identical backup",
+      "old global binding excluded"
+    ]
+  },
+  "archive": {
+    "officialCli": "1.8.0",
+    "successfulArchive": {
+      "previewState": "needs-sync",
+      "previewInputDigestUnchanged": true,
+      "commitState": "completed",
+      "archivedChangeDigestMatched": true,
+      "formalSpecBytesMatchedPreview": true
+    },
+    "strictValidationFailure": {
+      "code": "ARCHIVE_VALIDATION_FAILED",
+      "inputDigestUnchanged": true
+    },
+    "projectRequiresPriorSpecSync": {
+      "unsyncedCode": "ARCHIVE_SYNC_REQUIRED",
+      "blockedInputDigestUnchanged": true,
+      "synchronizedPreview": "already-synced",
+      "synchronizedCommit": "completed"
+    }
+  },
+  "nativeSessions": {
+    "report": "native-hooks.json",
+    "codex": "0.171.0-alpha.13",
+    "claude": "2.1.327"
+  },
+  "release": {
+    "currentBuildSignature": "adhoc",
+    "validCodeSigningIdentitiesOnTestHost": 0,
+    "testedPhysicalMacs": 1,
+    "outstanding": [
+      "Developer ID 签名与 Apple 公证",
+      "第二台团队设备接入",
+      "固定 HTTPS 发行地址与已签名整包更新演练"
+    ]
+  },
+  "upgradeTo060": {
+    "fromVersion": "0.5.4",
+    "toVersion": "0.6.0",
+    "product": "packaged macOS arm64",
+    "method": "local preview bundles replaced at one isolated installation path",
+    "registeredWorktrees": 4,
+    "hostsPerWorktree": 3,
+    "olderCatalogItems": 8,
+    "currentCatalogItems": 9,
+    "originalPinnedBindingsPreserved": true,
+    "originalAliasPreserved": true,
+    "newRule": {
+      "id": "archive-synced-specs",
+      "version": "1.0.0",
+      "visibleAcrossAllTwelveSelections": true,
+      "enabledByDefault": false
+    },
+    "archiveViaStableLauncher": {
+      "installedBy": "0.5.4 Codex 宿主接入",
+      "reusedWithoutReinstallation": true,
+      "officialCli": "1.8.0",
+      "runtime": "打包版 Electron，外部已安装的官方 CLI，PATH 仅含系统命令",
+      "unboundPreview": "needs-sync",
+      "boundUnmergedBlock": "ARCHIVE_SYNC_REQUIRED",
+      "blockedGitStatus": "clean",
+      "synchronizedPreview": "already-synced",
+      "reviewFingerprintMatched": true,
+      "commit": "archived",
+      "formalSpecBytesPreserved": true,
+      "archivedChangeDigestMatched": true
+    },
+    "appAsarSha256": "db8bc53cf5715ec2e6c21a29a273fb37bf956c074f19c214cf48af98bcad61d9"
+  }
+}

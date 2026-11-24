@@ -485,7 +485,7 @@ function candidateDiagnostic(context, candidate, error) {
 function unsupportedDiagnostic(candidate, validated) {
     return contract.diagnostic(
         'UNSUPPORTED_EMBEDDED_INITIATIVE_APP', 'warning', '不支持此应用',
-        candidate.collection + '/' + candidate.initiativeId + ' 使用当前 OpenSpecGUI 不支持的 ' + validated.normalized.unsupportedReasons.join('、') + '。',
+        candidate.collection + '/' + candidate.initiativeId + ' 使用当前 Agent Workbench 不支持的 ' + validated.normalized.unsupportedReasons.join('、') + '。',
         {
             providerId: PROVIDER_ID,
             initiativeId: candidate.initiativeId,
@@ -600,7 +600,7 @@ EmbeddedInitiativeAppProvider.prototype.prepareApp = async function (context, de
     };
     var validated = await readManifest(context, candidate);
     if (!validated.normalized.supported) {
-        var unsupported = new Error('当前 OpenSpecGUI 不支持此 Initiative App');
+        var unsupported = new Error('当前 Agent Workbench 不支持此 Initiative App');
         unsupported.code = 'UNSUPPORTED_INITIATIVE_APP';
         throw unsupported;
     }

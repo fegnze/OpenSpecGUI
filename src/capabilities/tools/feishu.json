@@ -1,0 +1,7 @@
+{
+  "provider": "feishu",
+  "type": "oauth",
+  "flow": "authorization-code",
+  "clientType": "feishu-custom-app",
+  "access": "read-write"
+}

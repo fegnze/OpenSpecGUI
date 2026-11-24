@@ -6,8 +6,8 @@ var path = require('node:path');
 var asar = require('@electron/asar');
 
 var SUPPORTED_ARCHITECTURES = new Set(['arm64', 'x64']);
-var SOURCE_EXTENSIONS = new Set(['.css', '.html', '.js']);
-var PRODUCT_NAME = 'OpenSpec GUI';
+var SOURCE_EXTENSIONS = new Set(['.css', '.html', '.js', '.cjs', '.mjs']);
+var PRODUCT_NAME = require('../package.json').productName;
 
 function verificationError(code, message) {
     var error = new Error(message);
@@ -25,7 +25,7 @@ function collectProductionSourceFiles(sourceRoot) {
             var target = path.join(directory, entry.name);
             if (entry.isDirectory()) {
                 collect(target);
-            } else if (entry.isFile() && SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
+            } else if (entry.isFile() && (SOURCE_EXTENSIONS.has(path.extname(entry.name)) || path.relative(sourceRoot, target).startsWith('capabilities' + path.sep))) {
                 files.push(target);
             }
         });
@@ -97,6 +97,10 @@ function verifyPackage(options) {
             packagedContent = asar.extractFile(packagePaths.asarPath, entry.relativePath);
         } catch (error) {
             throw verificationError('SOURCE_MISSING_FROM_ASAR', arch + ' package is missing ' + entry.relativePath + ': ' + error.message);
+        }
+        if (entry.relativePath === 'src/main/dsh-plugin/index.mjs' &&
+            !asar.statFile(packagePaths.asarPath, entry.relativePath).unpacked) {
+            throw verificationError('DSH_PLUGIN_PACKED', 'DeepSeek Harness requires its module outside app.asar.');
         }
         if (!entry.content.equals(packagedContent)) {
             throw verificationError('SOURCE_MISMATCH', arch + ' package source differs from workspace: ' + entry.relativePath);

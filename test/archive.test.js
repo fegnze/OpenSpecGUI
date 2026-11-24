@@ -17,6 +17,125 @@ var ProjectRegistry = require('../src/main/project-registry').ProjectRegistry;
 function options(fixture, extra) { return Object.assign({ cliOptions: { command: fixture.cli } }, extra || {}); }
 async function planFor(fixture, extra) { return planner.prepare(fixture.root, fixture.changeId, options(fixture, extra)); }
 
+test('写入期间更换归档规则时按原样恢复，并允许重新预检', async function (t) {
+    for (var stage of ['reserved', 'before-move']) {
+        await t.test(stage, async function () {
+            var fixture = await createFixture();
+            try {
+                var selected = false;
+                var settings = {
+                    getArchivePolicy: function () { return { requireSyncedSpecs: selected }; },
+                    onStep: function (current) { if (current === stage) { selected = true; } }
+                };
+                var plan = await planFor(fixture, settings);
+                var result = await transaction.commit(plan, fixture.recoveryDirectory, settings);
+                assert.equal(result.state, 'restored');
+                assert.match(result.message, /预览已失效/);
+                assert.equal(files.digest(await files.capture(fixture.root, fixture.changeId)), plan.inputHash);
+                assert.deepEqual(await transaction.recoveries(fixture.recoveryDirectory, fixture.root), []);
+                await assert.rejects(planFor(fixture, settings), { code: 'ARCHIVE_SYNC_REQUIRED' });
+            } finally { await fixture.cleanup(); }
+        });
+    }
+});
+
+test('两个进程同时确认同一工作树时，后到的写入可重试且不会改动先行事务', async function () {
+    var fixture = await createFixture();
+    var child;
+    try {
+        var plan = await planFor(fixture);
+        var script = [
+            "const planner = require('./src/core/archive-plan');",
+            "const transaction = require('./src/core/archive-transaction');",
+            "async function onStep(stage) {",
+            "    if (stage === 'reserved') { process.send(stage); await new Promise(resolve => process.once('message', resolve)); }",
+            "}",
+            "(async () => {",
+            "    const plan = await planner.prepare(process.argv[1], 'add-example', { cliOptions: { command: process.argv[2] } });",
+            "    const result = await transaction.commit(plan, process.argv[3], { onStep });",
+            "    if (result.state !== 'completed') { process.exitCode = 2; }",
+            "    process.disconnect();",
+            "})().catch(error => { console.error(error); process.exit(1); });"
+        ].join('\n');
+        child = childProcess.spawn(process.execPath, ['-e', script, fixture.root, fixture.cli, fixture.recoveryDirectory],
+            { cwd: path.resolve(__dirname, '..'), stdio: ['ignore', 'ignore', 'inherit', 'ipc'] });
+        var finished = require('node:events').once(child, 'exit');
+        var phase = await Promise.race([require('node:events').once(child, 'message'), finished]);
+        assert.equal(phase[0], 'reserved');
+        assert.deepEqual(await transaction.recoveries(fixture.recoveryDirectory, fixture.root), []);
+        await assert.rejects(transaction.commit(plan, fixture.recoveryDirectory), { code: 'ARCHIVE_BUSY' });
+        child.send('continue');
+        assert.equal((await finished)[0], 0);
+        assert.equal(await fs.readFile(path.join(fixture.root, plan.changes[0].path), 'utf8'), plan.changes[0].after);
+        await fs.stat(path.join(fixture.root, plan.destination));
+        assert.deepEqual(await transaction.recoveries(fixture.recoveryDirectory, fixture.root), []);
+    } finally {
+        if (child && child.exitCode === null) { child.kill(); }
+        await fixture.cleanup();
+    }
+});
+
+test('项目同步门禁阻止待合并规范，已审阅输入和门禁变化后旧确认失效', async function () {
+    var fixture = await createFixture();
+    var requireSync = false;
+    var settings = { getArchivePolicy: async function (root) {
+        assert.equal(root, fixture.root);
+        return { requireSyncedSpecs: requireSync };
+    } };
+    try {
+        var first = await planFor(fixture, settings);
+        var second = await planFor(fixture, settings);
+        assert.notEqual(first.id, second.id);
+        assert.match(first.reviewFingerprint, /^[a-f0-9]{64}$/);
+        assert.equal(first.preview.reviewFingerprint, second.reviewFingerprint);
+        assert.deepEqual(first.archiveArgs, ['archive', fixture.changeId, '--json', '--yes']);
+        requireSync = true;
+        var original = files.digest(await files.capture(fixture.root, fixture.changeId));
+        await assert.rejects(transaction.commit(first, fixture.recoveryDirectory, settings), { code: 'ARCHIVE_STALE' });
+        await assert.rejects(planFor(fixture, settings), { code: 'ARCHIVE_SYNC_REQUIRED', message: /openspec\/specs\/example\/spec\.md/ });
+        assert.equal(files.digest(await files.capture(fixture.root, fixture.changeId)), original);
+        await fixture.write(first.changes[0].path, first.changes[0].after);
+        var ready = await planFor(fixture, settings);
+        assert.notEqual(ready.reviewFingerprint, first.reviewFingerprint);
+        assert.equal(ready.preview.syncState, 'already-synced');
+        assert.equal((await transaction.commit(ready, fixture.recoveryDirectory, settings)).state, 'completed');
+    } finally { await fixture.cleanup(); }
+});
+
+test('校验锁定 CLI 版本、变更后的声明及已适配项目的语言检查器', async function () {
+    var fixture = await createFixture();
+    try {
+        var dependency = '@fission-ai/openspec';
+        var cliRoot = path.join(fixture.base, 'cli-package');
+        await fs.mkdir(path.join(cliRoot, 'bin'), { recursive: true });
+        var executable = path.join(cliRoot, 'bin/openspec.js');
+        await fs.rename(fixture.cli, executable);
+        fixture.cli = executable;
+        await fs.writeFile(path.join(cliRoot, 'package.json'), JSON.stringify({ name: dependency, version: '1.8.0' }));
+        var manifest = { name: 'example', devDependencies: { [dependency]: '1.8.0' } };
+        await fixture.write('package.json', JSON.stringify(manifest));
+        await fixture.write('package-lock.json', JSON.stringify({ packages: { ['node_modules/' + dependency]: { version: '1.7.0' } } }));
+        await assert.rejects(planFor(fixture), { code: 'ARCHIVE_CLI_VERSION_MISMATCH' });
+        await fixture.write('package-lock.json', JSON.stringify({ packages: { ['node_modules/' + dependency]: { version: '1.8.0' } } }));
+        var plan = await planFor(fixture);
+        manifest.devDependencies[dependency] = '^1.8.0';
+        await fixture.write('package.json', JSON.stringify(manifest));
+        await assert.rejects(transaction.commit(plan, fixture.recoveryDirectory), { code: 'ARCHIVE_STALE' });
+        manifest.devDependencies[dependency] = '^2.0.0';
+        await fixture.write('package.json', JSON.stringify(manifest));
+        await assert.rejects(planFor(fixture), { code: 'ARCHIVE_CLI_VERSION_MISMATCH' });
+        manifest.name = 'world-tour-casino';
+        manifest.devDependencies[dependency] = '1.8.0';
+        manifest.scripts = { 'check:openspec-language': 'node scripts/openspec/check_language.js' };
+        await fixture.write('package.json', JSON.stringify(manifest));
+        await fixture.write('scripts/openspec/check_language.js', 'throw new Error("未受支持的检查器不能执行");');
+        await assert.rejects(planFor(fixture), { code: 'ARCHIVE_PROJECT_GATE_UNSUPPORTED' });
+        manifest.scripts = {};
+        await fixture.write('package.json', JSON.stringify(manifest));
+        await assert.rejects(planFor(fixture), { code: 'ARCHIVE_PROJECT_GATE_UNSUPPORTED' });
+    } finally { await fixture.cleanup(); }
+});
+
 test('归档预览不写原项目，提交逐字节匹配预览并保留全部 Change 内容', async function () {
     var fixture = await createFixture({ incomplete: true });
     try {

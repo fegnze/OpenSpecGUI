@@ -4,15 +4,24 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' app:; script-src 'self' app:; style-src 'self' app:; img-src 'self' app: data:; font-src 'self' app:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-    <meta name="description" content="多项目 OpenSpec 本地执行工作台">
-    <title>OpenSpec GUI</title>
+    <meta name="description" content="团队 Agent 能力配置与 OpenSpec 项目工作台">
+    <title>Agent Workbench</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="capability-page.css">
+    <link rel="stylesheet" href="host-setup.css">
+    <link rel="stylesheet" href="hook-records.css">
+    <link rel="stylesheet" href="defect-setup.css">
     <script defer src="vendor/marked.umd.js"></script>
     <script defer src="vendor/lucide.min.js"></script>
     <script defer src="progress.js"></script>
     <script defer src="host-router.js"></script>
     <script defer src="initiative-app-host.js"></script>
     <script defer src="change-archive.js"></script>
+    <script defer src="change-attachments.js"></script>
+    <script defer src="defect-setup.js"></script>
+    <script defer src="capability-page.js"></script>
+    <script defer src="host-setup.js"></script>
+    <script defer src="hook-records.js"></script>
     <script defer src="app.js"></script>
 </head>
 <body>
@@ -22,7 +31,7 @@
             <div class="brand">
                 <div class="brand-mark" aria-hidden="true"><img src="assets/product-mark.png" alt=""></div>
                 <div class="brand-copy">
-                    <strong>OpenSpec GUI</strong>
+                    <strong>Agent Workbench</strong>
                     <span>本地执行工作台</span>
                 </div>
             </div>
@@ -47,7 +56,18 @@
                 </div>
             </section>
 
-            <nav class="primary-nav" aria-label="主导航">
+            <nav class="primary-nav" id="project-agent-nav" aria-labelledby="project-agent-heading" hidden>
+                <h2 id="project-agent-heading" class="nav-heading">Agent 配置</h2>
+                <button type="button" data-route="binding" aria-label="能力绑定" data-tooltip="能力绑定">
+                    <i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>能力绑定</span>
+                </button>
+                <button type="button" data-route="hook-records" aria-label="钩子记录" data-tooltip="钩子记录">
+                    <i data-lucide="activity" aria-hidden="true"></i><span>钩子记录</span>
+                </button>
+            </nav>
+
+            <nav class="primary-nav" id="openspec-nav" aria-labelledby="openspec-heading" hidden>
+                <h2 id="openspec-heading" class="nav-heading">OpenSpec</h2>
                 <button type="button" data-route="overview" aria-label="执行台" aria-current="page" data-tooltip="执行台">
                     <i data-lucide="gauge" aria-hidden="true"></i>
                     <span>执行台</span>
@@ -66,9 +86,13 @@
                 </button>
             </nav>
 
-            <div class="sidebar-status" id="sidebar-status" aria-live="polite">
-                <div class="source-line"><span class="source-dot"></span><span>正在读取</span></div>
-                <small>只读模式</small>
+            <div class="sidebar-footer">
+                <nav class="primary-nav" aria-labelledby="global-nav-heading">
+                    <h2 id="global-nav-heading" class="nav-heading">全局</h2>
+                    <button type="button" data-route="host-setup" aria-label="宿主接入" data-tooltip="宿主接入">
+                        <i data-lucide="plug" aria-hidden="true"></i><span>宿主接入</span>
+                    </button>
+                </nav>
             </div>
         </aside>
 
@@ -140,7 +164,7 @@
         <header>
             <div>
                 <h2 id="project-dialog-title">项目管理</h2>
-                <p>切换、添加或修复本机 OpenSpec 项目</p>
+                <p>切换、添加或修复本机 Git 仓库和 OpenSpec 项目</p>
             </div>
             <button class="icon-button" type="button" data-project-action="close" aria-label="关闭项目管理" data-tooltip="关闭">
                 <i data-lucide="x" aria-hidden="true"></i>

@@ -170,4 +170,4 @@ async function atomicJson(target, value) {
     finally { await fsp.rm(temporary, { force: true }); }
 }
 
-module.exports = { fail: fail, hash: hash, resolveInside: resolveInside, assertSafe: assertSafe, readRegular: readRegular, readTree: readTree, digest: digest, identityDigest: identityDigest, capture: capture, materialize: materialize, ensureParent: ensureParent, fileHash: fileHash, writeExclusive: writeExclusive, atomicJson: atomicJson, limits: LIMITS };
+module.exports = { fail: fail, hash: hash, resolveInside: resolveInside, assertSafe: assertSafe, readRegular: readRegular, readTree: readTree, digest: digest, identityDigest: identityDigest, inputPaths: inputPaths, capture: capture, materialize: materialize, ensureParent: ensureParent, fileHash: fileHash, writeExclusive: writeExclusive, atomicJson: atomicJson, limits: LIMITS };

@@ -8,7 +8,8 @@
     var initiativeAppOperation = 0;
     var page = document.getElementById('page');
     var workspaceElement = document.querySelector('.workspace');
-    var sidebarStatus = document.getElementById('sidebar-status');
+    var projectAgentNav = document.getElementById('project-agent-nav');
+    var openSpecNav = document.getElementById('openspec-nav');
     var searchInput = document.getElementById('global-search');
     var inPageSearch = document.getElementById('in-page-search');
     var inPageSearchInput = document.getElementById('in-page-search-input');
@@ -38,6 +39,9 @@
         routeProjectId: '',
         revision: 0,
         snapshot: null,
+        workspaceLoaded: false,
+        workspacePending: false,
+        workspaceError: '',
         view: 'overview',
         entityType: '',
         entityId: '',
@@ -65,6 +69,7 @@
     var inPageSearchState = { query: '', matches: [], activeIndex: -1, returnFocus: null };
     var IN_PAGE_SEARCH_HIGHLIGHT = 'openspec-in-page-search';
     var IN_PAGE_SEARCH_CURRENT_HIGHLIGHT = 'openspec-in-page-search-current';
+    var PROJECT_VIEWS = ['binding', 'hook-records', 'overview', 'initiatives', 'specs', 'archives'];
     var archiveController = new window.OpenSpecArchiveController({
         bridge: bridge,
         getContext: function () { return { projectId: state.projectId, revision: state.revision, projectName: state.snapshot ? state.snapshot.project.name : '', archiveRecovery: state.archiveRecovery || [] }; },
@@ -400,16 +405,50 @@
     function readUrl() {
         var route = hostRouter.parse(window.location.hash);
         Object.keys(route).forEach(function (key) {
-            if (key !== 'legacyChanges') { state[key] = route[key]; }
+            if (key !== 'legacyChanges' && key !== 'legacyCapabilities') { state[key] = route[key]; }
         });
-        if (route.legacyChanges) {
+        if (route.legacyChanges || route.legacyCapabilities) {
             resetOverviewFilters();
             syncUrl(true);
         }
         searchInput.value = state.query;
     }
 
-    function setView(view) {
+    function isGlobalView(view) {
+        return view === 'host-setup';
+    }
+
+    function isAgentProjectView(view) {
+        return view === 'binding' || view === 'hook-records';
+    }
+
+    function showingAgentPage() {
+        var project = activeProject();
+        return !state.query && (isGlobalView(state.view) || (isAgentProjectView(state.view) && project && project.valid));
+    }
+
+    function hasProjectOpenSpec(project) {
+        if (!project || !project.valid) { return false; }
+        return state.workspaceLoaded && state.projectId === project.id ? Boolean(state.snapshot) : Boolean(project.openspecPath);
+    }
+
+    function projectPage(project) {
+        if (!project || !project.valid) { return 'overview'; }
+        var saved = localStorage.getItem('openspec-workbench-project-view:' + project.id);
+        if (PROJECT_VIEWS.indexOf(saved) !== -1 && (project.openspecPath || isAgentProjectView(saved))) {
+            return saved;
+        }
+        return project.openspecPath ? 'overview' : 'binding';
+    }
+
+    function rememberProjectPage(view) {
+        var project = activeProject();
+        if (project && project.valid && PROJECT_VIEWS.indexOf(view) !== -1 && (isAgentProjectView(view) || hasProjectOpenSpec(project))) {
+            localStorage.setItem('openspec-workbench-project-view:' + project.id, view);
+        }
+    }
+
+    function setView(view, replace) {
         disposeInitiativeApp(Boolean(currentInitiativeAppHost));
         state.currentInitiativeRequest += 1;
         state.view = view;
@@ -425,7 +464,7 @@
         state.artifactId = '';
         if (view === 'overview') { resetOverviewFilters(); }
         searchInput.value = '';
-        syncUrl(false);
+        syncUrl(Boolean(replace));
         render();
         window.scrollTo(0, 0);
     }
@@ -470,8 +509,14 @@
     }
 
     function updateNavigation() {
+        var project = activeProject();
         var activeView = state.view === 'detail' ? routeForCollection(state.entityType) : (state.view === 'initiative' ? 'initiatives' : state.view);
+        projectAgentNav.hidden = !project || !project.valid;
+        openSpecNav.hidden = !hasProjectOpenSpec(project);
+        searchInput.disabled = openSpecNav.hidden || isGlobalView(state.view);
+        updateRefreshControl(project);
         if (state.view === 'search') { activeView = ''; }
+        rememberProjectPage(activeView);
         document.querySelectorAll('.primary-nav [data-route]').forEach(function (button) {
             if (button.getAttribute('data-route') === activeView) { button.setAttribute('aria-current', 'page'); }
             else { button.removeAttribute('aria-current'); }
@@ -490,8 +535,25 @@
     }
 
     function renderEmptyWorkspace() {
-        page.innerHTML = '<section class="onboarding-state"><div class="onboarding-mark">' + icon('folder-kanban', 28) + '</div><h1>没有已添加的项目</h1><p>添加一个包含 openspec 目录的本地项目，或扫描目录查找可导入项目。</p><div class="onboarding-actions"><button class="primary-command" type="button" data-project-action="add">' + icon('folder-plus', 17) + '添加项目</button><button class="secondary-command" type="button" data-project-action="scan">' + icon('scan-search', 17) + '扫描目录</button></div></section>';
+        page.innerHTML = '<section class="onboarding-state"><div class="onboarding-mark">' + icon('folder-kanban', 28) + '</div><h1>' + (state.view === 'binding' ? '请先选择项目' : '没有已添加的项目') + '</h1><p>添加 Git 仓库、worktree 或已有 OpenSpec 项目后，可为该项目绑定能力。</p><div class="onboarding-actions"><button class="primary-command" type="button" data-project-action="add">' + icon('folder-plus', 17) + '添加项目</button><button class="secondary-command" type="button" data-project-action="scan">' + icon('scan-search', 17) + '扫描目录</button></div></section>';
         refreshIcons();
+    }
+
+    function renderAgentPage() {
+        var project = activeProject();
+        if (isGlobalView(state.view)) {
+            window.OpenSpecHostSetup.show(page, bridge, project && project.valid ? project : null);
+            return;
+        }
+        if (state.view === 'binding') {
+            window.OpenSpecCapabilityPage.show({
+                page: page, bridge: bridge, view: state.view,
+                projectId: project && project.valid ? project.id : null,
+                projectName: project && project.valid ? project.name : ''
+            });
+            return;
+        }
+        window.OpenSpecHookRecords.show(page, bridge, project);
     }
 
     function progressHtml(tasks, label) {
@@ -532,6 +594,9 @@
             : '<section class="execution-board focused-proposals" id="proposal-content"><div class="proposal-list-toolbar"><div><h2>' + filteredProposalTitle(state.statusFilter) + '</h2><span>' + items.length + ' 项 · 按最近更新排序</span></div>' + statusFilters(snapshot.changes, counts) + '</div>' + proposalTable(items, '没有符合当前筛选的提案') + '</section>';
         var summary = snapshot.stats.activeChanges ? snapshot.stats.activeChanges + ' 个活跃提案，优先处理当前任务与异常状态。' : '当前项目没有活跃提案。';
         page.innerHTML = '<header class="control-header"><div><span class="project-context">' + escapeHtml(snapshot.project.name) + '</span><h1>当前执行</h1><p>' + escapeHtml(summary) + '</p></div><div class="control-freshness">' + icon('check-circle-2', 17) + '<span><strong>内容已刷新</strong><small>' + formatDate(snapshot.generatedAt) + ' · ' + (snapshot.lifecycle.source === 'cli' ? 'OpenSpec CLI' : '文件推断') + '</small></span></div></header><section class="metric-strip" aria-label="提案状态摘要">' + metricButton('活跃', snapshot.stats.activeChanges, '状态总览', 'all') + metricButton('进行中', snapshot.stats.inProgressChanges, '正在交付', 'in-progress') + metricButton('待归档', snapshot.stats.readyToArchive, '任务已完成', 'ready-to-archive') + metricButton('需要处理', snapshot.stats.attentionChanges, '缺失或异常', 'attention') + '</section>' + proposalContent;
+        if (snapshot.lifecycle.source !== 'cli' && snapshot.lifecycle.diagnostic) {
+            page.querySelector('.control-freshness small').title = snapshot.lifecycle.diagnostic;
+        }
         refreshIcons();
     }
 
@@ -952,6 +1017,15 @@
         if (!entity) { renderError('内容已不存在', '该提案或规范可能已被移动、删除或归档。请刷新工作区后重试。'); return; }
         if (entity.type === 'active' && state.detailPanel === 'tasks') { renderTaskDetail(entity); }
         else { renderDocumentDetail(entity); }
+        if (entity.type === 'active' || entity.type === 'archive') {
+            var context = { projectId: state.projectId, revision: state.revision, entityType: entity.type, changeId: entity.id };
+            var attachments = window.OpenSpecChangeAttachments.create(bridge.attachments, context, function () {
+                return state.view === 'detail' && state.registry.activeProjectId === context.projectId &&
+                    state.revision === context.revision && state.entityType === context.entityType && state.entityId === context.changeId;
+            });
+            var anchor = page.querySelector('.detail-tabs') || page.querySelector('.document-detail-header');
+            anchor.after(attachments);
+        }
     }
 
     function safeUrl(value, allowImage) {
@@ -1044,8 +1118,8 @@
 
     function render() {
         resetInPageSearch(false);
-        if (!state.snapshot) { renderLoading(); return; }
-        var selectedInitiative = state.view === 'initiative' ? findInitiative(state.providerId, state.initiativeId) : null;
+        var project = activeProject();
+        var selectedInitiative = state.snapshot && state.view === 'initiative' ? findInitiative(state.providerId, state.initiativeId) : null;
         var expectedAppKey = selectedInitiative && selectedInitiative.presentation.mode === 'embedded-app' ? embeddedAppKey(selectedInitiative) : '';
         workspaceElement.classList.toggle('has-embedded-app', Boolean(expectedAppKey));
         page.classList.toggle('is-embedded-app', Boolean(expectedAppKey));
@@ -1053,6 +1127,16 @@
             disposeInitiativeApp(false);
         }
         updateNavigation();
+        if (showingAgentPage()) { renderAgentPage(); return; }
+        if (!project) { renderEmptyWorkspace(); return; }
+        if (project.valid && !hasProjectOpenSpec(project)) { setView('binding', true); return; }
+        if (state.workspaceError) { renderError('无法载入项目', state.workspaceError); return; }
+        if (!state.workspaceLoaded) {
+            renderLoading();
+            if (!state.workspacePending) { return loadWorkspace(false); }
+            return;
+        }
+        if (!state.snapshot) { renderEmptyWorkspace(); return; }
         if (state.query) { state.view = 'search'; renderSearch(); }
         else if (state.view === 'overview') { renderOverview(); }
         else if (state.view === 'specs' || state.view === 'archives') { renderCollection(state.view); }
@@ -1062,53 +1146,82 @@
         else { state.view = 'overview'; syncUrl(true); renderOverview(); }
     }
 
-    function updateSidebar() {
-        var lifecycle = state.snapshot.lifecycle;
-        var inferred = lifecycle.source !== 'cli';
-        sidebarStatus.innerHTML = '<div class="source-line ' + (inferred ? 'is-inferred' : '') + '"><span class="source-dot"></span><span>' + (inferred ? '文件推断' : 'OpenSpec CLI') + '</span></div><small>' + (inferred ? '只读扫描 · 状态可用' : '进行中 ' + state.snapshot.stats.inProgressChanges + ' · 待归档 ' + state.snapshot.stats.readyToArchive) + '</small>';
-        if (inferred && lifecycle.diagnostic) { sidebarStatus.setAttribute('title', lifecycle.diagnostic); } else { sidebarStatus.removeAttribute('title'); }
-    }
-
     async function loadWorkspace(refresh) {
+        var projectId = state.registry.activeProjectId;
         var requestId = state.currentWorkspaceRequest + 1;
         state.currentWorkspaceRequest = requestId;
-        refreshButton.classList.add('is-refreshing');
-        refreshButton.disabled = true;
+        state.workspacePending = true;
+        state.workspaceError = '';
+        updateRefreshControl(activeProject());
         try {
             var payload = refresh ? await bridge.workspace.refresh() : await bridge.workspace.load();
-            if (requestId !== state.currentWorkspaceRequest) { return; }
+            if (requestId !== state.currentWorkspaceRequest || projectId !== state.registry.activeProjectId || payload.projectId !== projectId) { return; }
             state.projectId = payload.projectId;
             state.revision = payload.revision;
             state.snapshot = payload.snapshot;
+            state.workspaceLoaded = true;
             state.archiveRecovery = payload.archiveRecovery || [];
             archiveController.contextChanged({ projectId: payload.projectId, revision: payload.revision, archiveRecovery: state.archiveRecovery });
-            if (!payload.snapshot) {
-                document.title = 'OpenSpec GUI';
-                sidebarStatus.innerHTML = '<div class="source-line is-inferred"><span class="source-dot"></span><span>等待项目</span></div><small>只读模式</small>';
-                renderEmptyWorkspace();
-                return;
+            updateProjectSelector();
+            if (!showingAgentPage()) {
+                render();
+                if (refresh) { showToast('项目状态已刷新'); }
             }
-            document.title = payload.snapshot.project.name + ' · OpenSpec GUI';
-            updateSidebar();
+        } catch (error) {
+            if (requestId !== state.currentWorkspaceRequest || projectId !== state.registry.activeProjectId) { return; }
+            state.workspaceError = error.message || 'OpenSpec 读取失败';
+            state.workspaceLoaded = false;
+            state.snapshot = null;
+            updateProjectSelector();
+            if (!showingAgentPage()) { render(); }
+        } finally {
+            if (requestId === state.currentWorkspaceRequest) {
+                state.workspacePending = false;
+                updateRefreshControl(activeProject());
+                refreshIcons();
+            }
+        }
+    }
+
+    async function refreshCurrentPage() {
+        if (!showingAgentPage()) { return loadWorkspace(true); }
+        if (isGlobalView(state.view)) { return window.OpenSpecHostSetup.refresh(); }
+        if (state.view === 'binding') { window.OpenSpecCapabilityPage.refresh(); }
+        if (state.view === 'hook-records') { window.OpenSpecHookRecords.refresh(); }
+        var project = activeProject();
+        if (!project) { return; }
+        var requestId = state.currentWorkspaceRequest;
+        try {
+            // 切换 Git 分支可能增删 openspec/，只复核登记目录，无需扫描工作区内容。
+            var registry = await bridge.projects.list();
+            if (requestId !== state.currentWorkspaceRequest || registry.activeProjectId !== project.id || !showingAgentPage()) { return; }
+            var hadOpenSpec = hasProjectOpenSpec(project);
+            state.registry = registry;
+            var current = activeProject();
+            if (!current || !current.valid || hadOpenSpec !== Boolean(current.openspecPath)) { invalidateProjectWorkspace(); }
+            else { updateProjectSelector(); }
             render();
-            if (refresh) { showToast('执行状态已刷新'); }
-        } catch (error) { renderError('无法载入 OpenSpec', error.message); }
-        finally { refreshButton.classList.remove('is-refreshing'); refreshButton.disabled = false; refreshIcons(); }
+        } catch (error) {
+            if (requestId === state.currentWorkspaceRequest && showingAgentPage()) { showToast(error.message); }
+        }
     }
 
     async function checkForWorkspaceUpdates() {
-        if (updateCheckRunning || document.hidden || !state.snapshot || !bridge.workspace.checkUpdates) { return; }
+        if (updateCheckRunning || document.hidden || showingAgentPage() || !state.projectId || !bridge.workspace.checkUpdates) { return; }
+        var requestId = state.currentWorkspaceRequest;
         updateCheckRunning = true;
         try {
             var result = await bridge.workspace.checkUpdates();
+            if (requestId !== state.currentWorkspaceRequest) { return; }
             if (result.changed) {
+                if (showingAgentPage()) { state.workspaceLoaded = false; return; }
                 state.currentDocumentRequest += 1;
                 state.currentInitiativeRequest += 1;
                 await loadWorkspace(false);
-                showToast('项目内容已更新');
+                if (!showingAgentPage() && !state.workspaceError) { showToast('项目内容已更新'); }
             }
         } catch (error) {
-            showToast('自动刷新检查失败');
+            if (requestId === state.currentWorkspaceRequest && !showingAgentPage()) { showToast('自动刷新检查失败'); }
         } finally {
             updateCheckRunning = false;
         }
@@ -1134,8 +1247,18 @@
         return state.registry.projects.find(function (project) { return project.id === state.registry.activeProjectId; }) || null;
     }
 
+    function updateRefreshControl(project) {
+        var busy = state.workspacePending && !showingAgentPage();
+        var label = isGlobalView(state.view) ? '重新检测本机宿主' : '刷新项目内容';
+        refreshButton.setAttribute('aria-label', label);
+        refreshButton.dataset.tooltip = label;
+        refreshButton.classList.toggle('is-refreshing', busy);
+        refreshButton.disabled = busy || (!isGlobalView(state.view) && (!project || !project.valid));
+    }
+
     function updateProjectSelector() {
         var active = activeProject();
+        var hasOpenSpec = hasProjectOpenSpec(active);
         var options = state.registry.projects.map(function (project) {
             var current = project.id === state.registry.activeProjectId;
             var status = project.valid ? (current ? '当前项目' : '可切换') : '路径失效';
@@ -1146,12 +1269,13 @@
         projectPickerName.textContent = active ? active.name : '尚未添加项目';
         projectPickerButton.disabled = !state.registry.projects.length;
         projectPickerButton.setAttribute('aria-label', active ? '切换项目，当前为 ' + active.name : '切换项目');
-        projectHealth.textContent = active ? (active.valid ? 'OpenSpec 已连接' : '需要重新关联') : '等待选择';
-        projectHealth.classList.toggle('is-invalid', Boolean(active && !active.valid));
+        projectHealth.textContent = active ? (active.valid ? (state.workspaceError ? 'OpenSpec 读取失败' : (hasOpenSpec ? 'OpenSpec 已连接' : 'Git 项目')) : '需要重新关联') : '等待选择';
+        projectHealth.classList.toggle('is-invalid', Boolean(active && (!active.valid || state.workspaceError)));
+        document.title = active ? active.name + ' · Agent Workbench' : 'Agent Workbench';
         toolbarProjectName.textContent = active ? active.name : '选择项目';
         toolbarProjectButton.classList.toggle('is-invalid', Boolean(active && !active.valid));
-        searchInput.disabled = !active || !active.valid;
-        refreshButton.disabled = !active || !active.valid;
+        searchInput.disabled = !active || !active.valid || !hasOpenSpec || isGlobalView(state.view);
+        updateRefreshControl(active);
         refreshIcons();
     }
 
@@ -1191,7 +1315,7 @@
             state.registry = await bridge.projects.select(projectId);
             updateProjectSelector();
             resetProjectView();
-            await loadWorkspace(false);
+            await render();
             projectPickerButton.focus();
         } catch (error) {
             showToast(error.message);
@@ -1207,12 +1331,23 @@
         var project = state.registry.projects.find(function (item) {
             return item.id === state.routeProjectId && item.valid;
         });
-        if (!project) {
-            return false;
+        if (project) {
+            try {
+                state.registry = await bridge.projects.select(project.id);
+            } catch (error) {
+                // 链接指向的项目可能在上次读取注册表后被移动或移除。
+                await refreshRegistry();
+                project = null;
+            }
         }
-        state.registry = await bridge.projects.select(project.id);
-        updateProjectSelector();
-        await loadWorkspace(false);
+        if (project) {
+            invalidateProjectWorkspace();
+            updateProjectSelector();
+        } else {
+            resetProjectView();
+            showToast('链接中的项目不可用，已返回当前工作区');
+        }
+        await render();
         return true;
     }
 
@@ -1234,26 +1369,41 @@
         }
     }
 
-    function resetProjectView() {
+    function invalidateProjectWorkspace() {
         disposeInitiativeApp(false);
         state.snapshot = null;
         state.projectId = null;
+        state.revision = 0;
+        state.archiveRecovery = [];
+        state.workspaceLoaded = false;
+        state.workspacePending = false;
+        state.workspaceError = '';
+        state.currentWorkspaceRequest += 1;
+        state.currentDocumentRequest += 1;
+        state.currentInitiativeRequest += 1;
+        archiveController.contextChanged({ projectId: null, revision: null, archiveRecovery: [] });
+        updateProjectSelector();
+    }
+
+    function resetProjectView() {
+        invalidateProjectWorkspace();
         state.entityType = '';
         state.entityId = '';
         state.documentId = '';
+        state.documentMode = 'rendered';
+        state.detailPanel = 'tasks';
+        state.targetTask = '';
         state.providerId = '';
         state.initiativeId = '';
         state.appRoute = '';
         state.artifactId = '';
         state.changeScope = 'independent';
         state.query = '';
-        state.view = 'overview';
+        state.routeProjectId = state.registry.activeProjectId || '';
+        if (!isGlobalView(state.view)) { state.view = projectPage(activeProject()); }
         resetOverviewFilters();
-        state.currentDocumentRequest += 1;
-        state.currentInitiativeRequest += 1;
         searchInput.value = '';
         syncUrl(true);
-        renderLoading();
     }
 
     async function addProjectPaths(paths) {
@@ -1267,7 +1417,7 @@
         updateProjectSelector();
         renderProjectRegistry();
         resetProjectView();
-        await loadWorkspace(false);
+        await render();
         projectDialogStatus.textContent = '项目已添加';
     }
 
@@ -1282,8 +1432,9 @@
         scanResults.hidden = false;
         scanResultsCount.textContent = result.candidates.length + ' 个候选';
         scanCandidateList.innerHTML = result.candidates.length ? result.candidates.map(function (candidate, index) {
-            return '<label class="scan-candidate"><input type="checkbox" value="' + index + '"' + (candidate.registered ? ' disabled' : ' checked') + '><span><strong>' + escapeHtml(candidate.name) + '</strong><small>' + escapeHtml(candidate.rootPath) + '</small></span><em>' + (candidate.registered ? '已添加' : '可导入') + '</em></label>';
-        }).join('') : '<div class="compact-empty">没有发现 OpenSpec 项目</div>';
+            var kind = candidate.openspecPath ? 'OpenSpec 项目' : 'Git 项目';
+            return '<label class="scan-candidate"><input type="checkbox" value="' + index + '"' + (candidate.registered ? ' disabled' : ' checked') + '><span><strong>' + escapeHtml(candidate.name) + '</strong><small>' + escapeHtml(candidate.rootPath) + '</small></span><em>' + kind + ' · ' + (candidate.registered ? '已添加' : '可导入') + '</em></label>';
+        }).join('') : '<div class="compact-empty">没有发现可导入项目</div>';
         projectDialogStatus.textContent = '扫描完成';
         refreshIcons();
     }
@@ -1299,7 +1450,7 @@
                 updateProjectSelector();
                 renderProjectRegistry();
                 resetProjectView();
-                await loadWorkspace(false);
+                await render();
                 projectDialog.close();
             } else if (action === 'remove') {
                 var project = state.registry.projects.find(function (item) { return item.id === projectId; });
@@ -1308,7 +1459,7 @@
                     updateProjectSelector();
                     renderProjectRegistry();
                     resetProjectView();
-                    await loadWorkspace(false);
+                    await render();
                 }
             } else if (action === 'relink') {
                 var relinked = await bridge.projects.relink(projectId);
@@ -1317,7 +1468,7 @@
                     updateProjectSelector();
                     renderProjectRegistry();
                     resetProjectView();
-                    await loadWorkspace(false);
+                    await render();
                 }
             } else if (action === 'close') {
                 projectDialog.close();
@@ -1361,7 +1512,7 @@
             var action = actionButton.getAttribute('data-action');
             if (action === 'archive-change') { archiveController.open(state.entityId, actionButton); return; }
             if (action === 'copy-proposal-name') { copyProposalName(actionButton.getAttribute('data-proposal-name') || '', actionButton); return; }
-            if (action === 'refresh') { loadWorkspace(true); return; }
+            if (action === 'refresh') { refreshCurrentPage(); return; }
             if (action === 'copy-path') { copyDocumentPath(); return; }
             if (action === 'close-initiative-artifact') { state.artifactId = ''; syncUrl(false); renderInitiativeDetail(); return; }
             if (action === 'retry-initiative-app') { state.appRoute = ''; syncUrl(true); renderInitiativeDetail(); return; }
@@ -1453,7 +1604,7 @@
         if (event.key === 'Escape' && document.activeElement === searchInput) { searchInput.value = ''; state.query = ''; state.view = 'overview'; resetOverviewFilters(); syncUrl(true); render(); searchInput.blur(); }
     });
 
-    refreshButton.addEventListener('click', function () { loadWorkspace(true); });
+    refreshButton.addEventListener('click', refreshCurrentPage);
     async function openProjectDialog() {
         projectDialogStatus.textContent = '';
         scanResults.hidden = true;
@@ -1522,13 +1673,17 @@
         applyTheme(localStorage.getItem('openspec-workbench-theme') || 'system');
         refreshIcons();
         await refreshRegistry();
-        await restoreRouteProject();
-        await loadWorkspace(false);
-        bridge.workspace.onChanged(function () { loadWorkspace(false); });
+        if (!window.location.hash) { state.view = projectPage(activeProject()); }
+        if (!state.routeProjectId) { state.routeProjectId = state.registry.activeProjectId || ''; }
+        if (!await restoreRouteProject()) { await render(); }
+        bridge.workspace.onChanged(function () {
+            if (showingAgentPage()) { state.workspaceLoaded = false; return; }
+            loadWorkspace(false);
+        });
         updateTimer = setInterval(checkForWorkspaceUpdates, 30000);
     }
 
     initialize().catch(function (error) {
-        renderError('无法启动 OpenSpec GUI', error.message);
+        renderError('无法启动 Agent Workbench', error.message);
     });
 }());

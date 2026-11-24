@@ -12,7 +12,7 @@ function collect(directory) {
         var target = path.join(directory, entry.name);
         if (entry.isDirectory()) {
             collect(target);
-        } else if (entry.isFile() && /\.js$/i.test(entry.name)) {
+        } else if (entry.isFile() && /\.[cm]?js$/i.test(entry.name)) {
             files.push(target);
         }
     });

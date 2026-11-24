@@ -1,0 +1,99 @@
+[
+  {
+    "id": "feishu-defect-agent",
+    "kind": "skill",
+    "name": "飞书缺陷 Agent",
+    "description": "从飞书项目获取缺陷，按本轮选择排查或修复并逐条回写结果。",
+    "version": "1.2.0",
+    "source": "skills/feishu-defect-agent/SKILL.md",
+    "origin": "fegnze/my-space@bb39a55 · skills/feishu-defect-agent",
+    "scopeHint": "按办理缺陷的工作树绑定，需 Node.js 22+、Meegle CLI 和飞书消息应用权限。"
+  },
+  {
+    "id": "git-commit",
+    "kind": "skill",
+    "name": "WTC 提交与推送",
+    "description": "检查已收口的改动，按 WTC 路径和提交规则暂存、提交并推送。",
+    "version": "1.0.0",
+    "source": "skills/git-commit/SKILL.md",
+    "origin": "LuckyZen/WorldTourCasino@cdc79728e92 · .claude/skills/git-commit",
+    "scopeHint": "仅限 WorldTourCasino 仓库及其工作树。"
+  },
+  {
+    "id": "cv-test1",
+    "kind": "mcp",
+    "name": "cv-test1",
+    "description": "通过 Streamable HTTP 访问 CV 测试服的 MCP 服务。",
+    "version": "1.0.0",
+    "source": "mcp/cv-test1.json",
+    "origin": "团队 CV 测试环境",
+    "scopeHint": "按需绑定到使用 CV 测试服务的项目，使用个人获发的 Bearer token。",
+    "provider": "cv-test1"
+  },
+  {
+    "id": "feishu",
+    "kind": "tool",
+    "name": "飞书文档连接认证",
+    "description": "读取飞书文档和知识库中的新版文档，按本人权限添加全文评论或文末批注。",
+    "version": "3.0.0",
+    "versions": [
+      { "version": "3.0.0", "source": "tools/feishu-documents.json", "origin": "飞书开放平台" },
+      { "version": "2.0.0", "source": "tools/feishu.json", "origin": "飞书开放平台" }
+    ],
+    "source": "tools/feishu-documents.json",
+    "origin": "飞书开放平台 · 自建应用 OAuth",
+    "scopeHint": "3.0 授权涵盖文档读写、知识库节点读取与评论创建，文末批注定位到最后一个内容块。",
+    "provider": "feishu"
+  },
+  {
+    "id": "google-drive",
+    "kind": "tool",
+    "name": "Google Drive 连接认证",
+    "description": "按名称或文件夹查找 Google Drive 文件，查看单个文件的元数据。",
+    "version": "1.0.0",
+    "source": "tools/google-drive.json",
+    "origin": "Google Drive · Desktop OAuth",
+    "scopeHint": "本机个人授权，仅提供适配器声明的只读操作。",
+    "provider": "google-drive"
+  },
+  {
+    "id": "portable-paths",
+    "kind": "rule",
+    "name": "可移植的路径",
+    "description": "仓库内文件与跨工程引用使用团队成员都能定位的路径。",
+    "version": "1.0.0",
+    "source": "rules/portable-paths.md",
+    "origin": "LuckyZen/WorldTourCasino@15d8e24b4fc · AGENTS.md（通用原则改写）",
+    "scopeHint": "可独立启用，适用于多个项目。"
+  },
+  {
+    "id": "task-scope",
+    "kind": "rule",
+    "name": "任务范围",
+    "description": "保护协作者改动，按当前目标和授权决定可写范围。",
+    "version": "1.0.0",
+    "source": "rules/task-scope.md",
+    "origin": "LuckyZen/WorldTourCasino@15d8e24b4fc · AGENTS.md（通用原则改写）",
+    "scopeHint": "可独立启用，适用于多个项目。"
+  },
+  {
+    "id": "verify-changes",
+    "kind": "rule",
+    "name": "变更验证",
+    "description": "按影响面选择检查，并保留项目要求的验证与门禁。",
+    "version": "1.0.0",
+    "source": "rules/verify-changes.md",
+    "origin": "LuckyZen/WorldTourCasino@15d8e24b4fc · AGENTS.md（通用原则改写）",
+    "scopeHint": "可独立启用，适用于多个项目。"
+  },
+  {
+    "id": "archive-synced-specs",
+    "kind": "rule",
+    "name": "归档前同步规范",
+    "description": "要求先将提案的增量规范同步到正式规范，再执行归档。",
+    "version": "1.0.0",
+    "source": "rules/archive-synced-specs.md",
+    "origin": "团队 OpenSpec 归档规范",
+    "scopeHint": "任一宿主绑定后，桌面与 Agent 的受控归档都会检查当前工作树。"
+  }
+]

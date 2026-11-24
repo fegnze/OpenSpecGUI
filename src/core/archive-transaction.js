@@ -49,7 +49,22 @@ async function settledState(record) {
     return 'needs-recovery';
 }
 
-async function recoveries(directory, root) {
+// SQLite 的写锁随进程退出释放；崩溃后的恢复由原有的 JSON 操作记录负责。
+async function withWorktreeLock(directory, root, run) {
+    await fs.mkdir(directory, { recursive: true, mode: 448 });
+    var DatabaseSync = require('node:sqlite').DatabaseSync;
+    var lock = new DatabaseSync(path.join(directory, files.hash(root) + '.sqlite'));
+    try {
+        try { lock.exec('BEGIN IMMEDIATE'); }
+        catch (error) {
+            if (error.errcode === 5 || error.errcode === 6) { throw files.fail('ARCHIVE_BUSY', '此工作树正在归档，请稍后重试'); }
+            throw error;
+        }
+        return await run();
+    } finally { lock.close(); }
+}
+
+async function scanRecoveries(directory, root) {
     var names;
     try { names = await fs.readdir(directory); } catch (error) { if (error.code === 'ENOENT') { return []; } throw error; }
     var results = [];
@@ -70,11 +85,24 @@ async function recoveries(directory, root) {
     return results;
 }
 
+async function recoveries(directory, root) {
+    try { await fs.access(directory); }
+    catch (error) { if (error.code === 'ENOENT') { return []; } throw error; }
+    try { return await withWorktreeLock(directory, root, function () { return scanRecoveries(directory, root); }); }
+    catch (error) {
+        // 正在进行的写入有自己的操作记录，读取页面时不得将它标为已恢复。
+        if (error.code === 'ARCHIVE_BUSY') { return []; }
+        throw error;
+    }
+}
+
 async function verifyPlanOutputs(plan) {
     var tree = await files.capture(plan.root, plan.changeId);
     var originalRest = new Map(Array.from(plan.before).filter(function (entry) { return entry[0] !== 'openspec/specs' && !entry[0].startsWith('openspec/specs/'); }));
     var currentRest = new Map(Array.from(tree).filter(function (entry) { return entry[0] !== 'openspec/specs' && !entry[0].startsWith('openspec/specs/'); }));
-    if (files.digest(originalRest) !== files.digest(currentRest)) { throw files.fail('ARCHIVE_STALE', '执行期间 Change、配置或工作流发生变化'); }
+    if (files.digest(originalRest) !== files.digest(currentRest) || files.identityDigest(originalRest) !== files.identityDigest(currentRest)) {
+        throw files.fail('ARCHIVE_STALE', '执行期间 Change、配置或工作流发生变化');
+    }
     var expected = new Map(Array.from(plan.before).filter(function (entry) { return entry[0].startsWith('openspec/specs/') && entry[1].type === 'file'; }).map(function (entry) { return [entry[0], entry[1].hash]; }));
     var owned = new Set();
     plan.changes.forEach(function (change) {
@@ -115,11 +143,11 @@ async function rollback(record) {
     try {
         var source = await changeDigest(record.root, record.source);
         var destination = await changeDigest(record.root, record.destination);
-        if (!source && destination === record.changeHash) {
+        if (record.moved && !source && destination === record.changeHash) {
             await planner.assertAbsent(record.root, record.source);
             await fs.mkdir(files.resolveInside(record.root, record.source));
             await fs.rename(await files.assertSafe(record.root, record.destination, false), files.resolveInside(record.root, record.source));
-        } else if (!source || source !== record.changeHash) { conflicts.push(record.source); }
+        } else if (record.moved || !source) { conflicts.push(record.source); }
     } catch (error) { conflicts.push(record.source + ': ' + error.message); }
     for (var change of record.changes.slice().reverse()) {
         if (!change.started) { continue; }
@@ -162,9 +190,13 @@ async function rollback(record) {
 }
 
 async function commit(plan, directory, options) {
+    return withWorktreeLock(directory, plan.root, function () { return commitLocked(plan, directory, options); });
+}
+
+async function commitLocked(plan, directory, options) {
     var settings = options || {};
     await planner.revalidate(plan, settings);
-    if ((await recoveries(directory, plan.root)).length) { throw files.fail('ARCHIVE_RECOVERY_REQUIRED', '此项目有未决归档恢复状态，请处理后重试'); }
+    if ((await scanRecoveries(directory, plan.root)).length) { throw files.fail('ARCHIVE_RECOVERY_REQUIRED', '此项目有未决归档恢复状态，请处理后重试'); }
     var record = { version: 1, id: plan.id, root: plan.root, source: plan.source, destination: plan.destination, changeHash: plan.changeHash, state: 'writing', createdDirs: [], changes: plan.changes.map(function (change) { return Object.assign({}, change, { backup: change.path + '.gui-' + plan.id + '.bak', staged: change.path + '.gui-' + plan.id + '.next', started: false }); }) };
     validateRecord(record);
     await save(directory, record);
@@ -176,6 +208,7 @@ async function commit(plan, directory, options) {
         record.reservation = { ino: reservation.ino, dev: reservation.dev };
         await save(directory, record);
         await hook('reserved');
+        await planner.revalidateRules(plan, settings);
         if (plan.inputHash !== files.digest(await files.capture(plan.root, plan.changeId))) { throw files.fail('ARCHIVE_STALE', '执行前项目文件发生变化'); }
         for (var change of record.changes) {
             await files.ensureParent(record.root, change.path, record.createdDirs);
@@ -202,8 +235,10 @@ async function commit(plan, directory, options) {
         var currentReservation = await exists(record.root, record.destination);
         if (!currentReservation || currentReservation.ino !== reservation.ino || currentReservation.dev !== reservation.dev || (await fs.readdir(files.resolveInside(record.root, record.destination))).length) { throw files.fail('ARCHIVE_DESTINATION_EXISTS', '归档目标在执行期间被占用'); }
         // Recheck immediately after any injected or asynchronous boundary.
+        await planner.revalidateRules(plan, settings);
         await verifyPlanOutputs(plan);
         await fs.rename(await files.assertSafe(record.root, record.source, false), await files.assertSafe(record.root, record.destination, false));
+        record.moved = true;
         await hook('moved');
         if (await settledState(record) !== 'completed') { throw files.fail('ARCHIVE_RESULT_INVALID', '最终文件结果与预览不一致'); }
         record.state = 'completed';

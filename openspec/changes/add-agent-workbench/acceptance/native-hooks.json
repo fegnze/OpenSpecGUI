@@ -1,0 +1,128 @@
+{
+  "profiles": "temporary",
+  "model": "loopback deterministic fixture",
+  "hosts": {
+    "codex": "0.171.0-alpha.13",
+    "claude": "2.1.327"
+  },
+  "cases": [
+    {
+      "host": "codex",
+      "case": "normal",
+      "probeId": "287f3d4bc3",
+      "receiptDecisions": [
+        "context",
+        "pass",
+        "deny"
+      ],
+      "editOutcome": "kept allowed content"
+    },
+    {
+      "host": "codex",
+      "case": "missing",
+      "probeId": "a81c154e34",
+      "receiptDecisions": [],
+      "editOutcome": "tool continued"
+    },
+    {
+      "host": "codex",
+      "case": "timeout",
+      "probeId": "d81fd3c659",
+      "receiptDecisions": [
+        "context"
+      ],
+      "editOutcome": "tool continued"
+    },
+    {
+      "host": "claude",
+      "case": "normal",
+      "probeId": "6f1d155c7b",
+      "receiptDecisions": [
+        "context",
+        "skipped",
+        "pass",
+        "deny"
+      ],
+      "editOutcome": "kept allowed content"
+    },
+    {
+      "host": "claude",
+      "case": "missing",
+      "probeId": "fe01193b5e",
+      "receiptDecisions": [],
+      "editOutcome": "tool continued"
+    },
+    {
+      "host": "claude",
+      "case": "timeout",
+      "probeId": "e2704cf10c",
+      "receiptDecisions": [
+        "context"
+      ],
+      "editOutcome": "tool continued"
+    }
+  ],
+  "workbenchVersion": "0.5.4",
+  "date": "2026-11-24",
+  "guiClosed": {
+    "guiClosedBeforeAndAfter": true,
+    "results": [
+      {
+        "host": "codex",
+        "mode": "normal",
+        "run": "a6745983d1",
+        "exit": 0,
+        "file": "ok-relative",
+        "requests": 3,
+        "receipts": [
+          [
+            "2026-11-24T06:35:17.669Z",
+            "SessionStart",
+            "context"
+          ],
+          [
+            "2026-11-24T06:35:17.708Z",
+            "PreToolUse",
+            "pass"
+          ],
+          [
+            "2026-11-24T06:35:17.752Z",
+            "PreToolUse",
+            "deny"
+          ]
+        ]
+      },
+      {
+        "host": "claude",
+        "mode": "normal",
+        "run": "8f3d434694",
+        "exit": 0,
+        "file": "ok-relative",
+        "requests": 4,
+        "receipts": [
+          [
+            "2026-11-24T06:35:18.496Z",
+            "SessionStart",
+            "context"
+          ],
+          [
+            "2026-11-24T06:35:18.579Z",
+            "PreToolUse",
+            "skipped"
+          ],
+          [
+            "2026-11-24T06:35:18.630Z",
+            "PreToolUse",
+            "pass"
+          ],
+          [
+            "2026-11-24T06:35:18.686Z",
+            "PreToolUse",
+            "deny"
+          ]
+        ]
+      }
+    ]
+  },
+  "timeoutObservation": "工具钩子延迟 4 秒、宿主限时 1 秒时，两个宿主都只留下会话启动回执并继续编辑。仅凭缺失的回执无法判断超时。"
+}

@@ -1,6 +1,7 @@
 'use strict';
 
 var assert = require('node:assert/strict');
+var execFileSync = require('node:child_process').execFileSync;
 var fsPromises = require('node:fs/promises');
 var os = require('node:os');
 var path = require('node:path');
@@ -65,6 +66,48 @@ test('工作区刷新指纹有界且不扫描 Provider 专属 programs 树', asy
         }, function (error) { return error.code === 'WORKSPACE_STAMP_LIMIT'; });
     } finally {
         await fsPromises.rm(root, { recursive: true, force: true });
+    }
+});
+
+test('超过扫描字节预算的 JSON 附件允许载入，附件变更独立于工作区刷新', async function () {
+    var fixture = await fixtures.createFixtureProject();
+    var dataRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'openspec-gui-large-evidence-'));
+    var service = new WorkbenchService(new ProjectRegistry(path.join(dataRoot, 'projects.json')), {
+        statusProvider: fixtures.inferredStatusProvider,
+        workspaceStampOptions: { maxBytes: 16384 }
+    });
+    try {
+        var evidence = 'openspec/changes/add-feature/evidence/run.json';
+        var evidencePath = path.join(fixture.root, evidence);
+        var contents = JSON.stringify({ result: 'A'.repeat(32768) });
+        var fixedTime = new Date('2024-01-01T00:00:00Z');
+        await fixture.write(evidence, contents);
+        await fsPromises.utimes(evidencePath, fixedTime, fixedTime);
+        await service.initialize();
+        await service.addProjects([fixture.root]);
+        var loaded = await service.loadWorkspace(false);
+        assert.ok(loaded.snapshot.changes.some(function (change) { return change.id === 'add-feature'; }));
+        assert.equal(await service.refreshIfChanged(), false);
+
+        await fixture.write(evidence, contents.replace('AA', 'BB'));
+        await fsPromises.utimes(evidencePath, fixedTime, fixedTime);
+        assert.equal(await service.refreshIfChanged(), false);
+        await fsPromises.rm(evidencePath);
+        await fixture.write('openspec/changes/add-feature/evidence/new-run/other.json', '{}');
+        assert.equal(await service.refreshIfChanged(), false);
+
+        await fixture.write('openspec/changes/add-feature/tasks.md', '- [x] 1.1 完成\n');
+        assert.equal(await service.refreshIfChanged(), true);
+        var changed = await service.loadWorkspace(false);
+        var change = changed.snapshot.changes.find(function (item) { return item.id === 'add-feature'; });
+        assert.equal(change.tasks.total, 1);
+        assert.equal(change.tasks.completed, 1);
+
+        await fixture.write('openspec/config.yaml', 'description: ' + 'x'.repeat(16384));
+        await assert.rejects(function () { return service.loadWorkspace(true); }, { code: 'WORKSPACE_STAMP_LIMIT' });
+    } finally {
+        await fixture.cleanup();
+        await fsPromises.rm(dataRoot, { recursive: true, force: true });
     }
 });
 
@@ -152,6 +195,44 @@ test('没有项目时返回稳定空工作区', async function () {
         assert.deepEqual(await service.loadWorkspace(false), { projectId: null, revision: 0, snapshot: null });
     } finally {
         await fsPromises.rm(dataRoot, { recursive: true, force: true });
+    }
+});
+
+test('普通工作树保留当前项目，OpenSpec 增删后刷新功能并拒绝旧文档和归档操作', async function () {
+    var fixture = await require('./archive-fixture').createArchiveFixture();
+    var ordinary = path.join(fixture.base, 'ordinary');
+    var service = new WorkbenchService(new ProjectRegistry(path.join(fixture.base, 'userdata', 'projects.json')), {
+        cliOptions: { command: fixture.cli }, statusProvider: fixtures.inferredStatusProvider
+    });
+    try {
+        execFileSync('git', ['init', '-q', ordinary]);
+        await service.initialize();
+        var priorProject = (await service.addProjects([fixture.root])).added[0];
+        var prior = await service.loadWorkspace(false);
+        var request = { projectId: prior.projectId, revision: prior.revision, changeId: fixture.changeId };
+        var preview = await service.prepareArchive(request);
+        var project = (await service.addProjects([ordinary])).added[0];
+        assert.deepEqual(await service.loadWorkspace(false), { projectId: project.id, snapshot: null });
+        assert.equal((await service.checkForUpdates()).changed, false);
+        await assert.rejects(service.readDocument(Object.assign({ documentId: 'openspec/specs/example/spec.md' }, request)), /OpenSpec/);
+        await assert.rejects(service.loadInitiative(request), /OpenSpec/);
+        await assert.rejects(service.resolveChangeDirectory(request), /OpenSpec/);
+        await assert.rejects(service.prepareArchive({ projectId: project.id, revision: service.revision, changeId: fixture.changeId }), /OpenSpec/);
+        assert.throws(function () { service.commitArchive(Object.assign({ planId: preview.planId }, request)); }, { code: 'ARCHIVE_STALE' });
+        await fsPromises.access(path.join(fixture.root, fixture.source));
+
+        var openSpec = path.join(ordinary, 'openspec');
+        await fsPromises.mkdir(openSpec);
+        assert.equal((await service.checkForUpdates()).changed, true);
+        var added = await service.loadWorkspace(false);
+        assert.equal(added.snapshot.project.id, project.id);
+        await fsPromises.rmdir(openSpec);
+        assert.equal((await service.checkForUpdates()).changed, true);
+        assert.deepEqual(await service.loadWorkspace(true), { projectId: project.id, snapshot: null });
+        await service.selectProject(priorProject.id);
+        assert.equal((await service.loadWorkspace(false)).snapshot.project.id, priorProject.id);
+    } finally {
+        await fixture.cleanup();
     }
 });
 

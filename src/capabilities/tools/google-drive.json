@@ -1,0 +1,7 @@
+{
+  "provider": "google-drive",
+  "type": "oauth",
+  "flow": "authorization-code",
+  "clientType": "google-desktop",
+  "access": "read-only"
+}

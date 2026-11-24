@@ -31,9 +31,9 @@ async function assertFixedSidebarScroll(page, context) {
         var workspace = document.querySelector('.workspace');
         var sidebar = document.querySelector('.sidebar');
         var toolbar = document.querySelector('.toolbar');
-        var status = document.querySelector('.sidebar-status');
+        var globalNav = document.querySelector('nav[aria-labelledby="global-nav-heading"]');
         var sidebarRect = sidebar.getBoundingClientRect();
-        var statusRect = status.getBoundingClientRect();
+        var navRect = globalNav.getBoundingClientRect();
 
         workspace.scrollTop = 0;
         document.scrollingElement.scrollTop = 0;
@@ -43,8 +43,7 @@ async function assertFixedSidebarScroll(page, context) {
             workspaceCanScroll: workspace.scrollHeight > workspace.clientHeight,
             sidebar: { top: sidebarRect.top, bottom: sidebarRect.bottom },
             toolbarTop: toolbar.getBoundingClientRect().top,
-            statusVisible: statusRect.width > 0 && statusRect.height > 0,
-            status: { top: statusRect.top, bottom: statusRect.bottom }
+            globalNav: { top: navRect.top, bottom: navRect.bottom }
         };
     });
 
@@ -60,15 +59,15 @@ async function assertFixedSidebarScroll(page, context) {
         var workspace = document.querySelector('.workspace');
         var sidebar = document.querySelector('.sidebar');
         var toolbar = document.querySelector('.toolbar');
-        var status = document.querySelector('.sidebar-status');
+        var globalNav = document.querySelector('nav[aria-labelledby="global-nav-heading"]');
         var sidebarRect = sidebar.getBoundingClientRect();
-        var statusRect = status.getBoundingClientRect();
+        var navRect = globalNav.getBoundingClientRect();
         return {
             documentScrollTop: document.scrollingElement.scrollTop,
             workspaceScrollTop: workspace.scrollTop,
             sidebar: { top: sidebarRect.top, bottom: sidebarRect.bottom },
             toolbarTop: toolbar.getBoundingClientRect().top,
-            status: { top: statusRect.top, bottom: statusRect.bottom }
+            globalNav: { top: navRect.top, bottom: navRect.bottom }
         };
     });
 
@@ -76,10 +75,8 @@ async function assertFixedSidebarScroll(page, context) {
     assert.ok(after.workspaceScrollTop > 0, context + ' 右侧 workspace 未响应滚轮');
     assert.deepEqual(after.sidebar, before.sidebar, context + ' 侧边栏位置随内容滚动');
     assert.equal(after.toolbarTop, before.toolbarTop, context + ' 工具栏位置随内容滚动');
-    if (before.statusVisible) {
-        assert.deepEqual(after.status, before.status, context + ' 侧边栏底部状态随内容滚动');
-        assert.ok(after.status.top >= 0 && after.status.bottom <= before.viewportHeight, context + ' 侧边栏底部状态不可见');
-    }
+    assert.deepEqual(after.globalNav, before.globalNav, context + ' 全局导航随内容滚动');
+    assert.ok(after.globalNav.bottom > after.globalNav.top && after.globalNav.top >= 0 && after.globalNav.bottom <= before.viewportHeight, context + ' 全局导航不可见');
     await page.evaluate(function () {
         document.querySelector('.workspace').scrollTop = 0;
     });
@@ -262,7 +259,9 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         assert.equal(await page.locator('.proposal-lane-card').count(), 3);
         assert.equal(await page.locator('.control-table-row').count(), 0);
         assert.deepEqual(await page.locator('.proposal-lane h2').allTextContents(), ['进行中', '待归档', '需要处理']);
-        assert.equal(await page.locator('.primary-nav [data-route]').count(), 4);
+        assert.deepEqual(await page.locator('#openspec-nav [data-route]').allTextContents().then(function (labels) {
+            return labels.map(function (label) { return label.trim(); });
+        }), ['执行台', '专项', '规范', '归档']);
         assert.equal(await page.locator('[data-route="changes"]').count(), 0);
         var overviewProgress = await page.locator('.proposal-lane-card[data-entity-id="modern-console"] .progress-bar').evaluate(function (progressBar) {
             var segments = Array.from(progressBar.querySelectorAll('.progress-segment'));
@@ -336,6 +335,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         await page.locator('.project-registry-row', { hasText: 'empty-specs' }).locator('[data-project-action="select"]').focus();
         await page.keyboard.press('Enter');
         await page.waitForFunction(function () { return document.title.indexOf('empty-specs') === 0; });
+        await page.locator('.control-header').waitFor();
         assert.equal(await page.locator('.proposal-lane-card').count(), 0);
         assert.match(await page.locator('.compact-empty').textContent(), /没有活跃提案/);
         await page.locator('#project-manage-button').focus();
@@ -344,6 +344,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         await page.locator('.project-registry-row', { hasText: 'atlas-workbench' }).locator('[data-project-action="select"]').focus();
         await page.keyboard.press('Enter');
         await page.waitForFunction(function () { return document.title.indexOf('atlas-workbench') === 0; });
+        await page.locator('.execution-lanes').waitFor();
         assert.equal(await page.locator('.execution-lanes').count(), 1);
         assert.equal(await page.locator('.task-queue, [data-role="task-queue"]').count(), 0);
 
@@ -533,7 +534,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         assert.equal(securityState.imageSource, null);
         assert.equal(securityState.imageHandler, null);
         assert.equal(securityState.requireType, 'undefined');
-        assert.deepEqual(securityState.apiKeys, ['changes', 'clipboard', 'documents', 'initiativeApp', 'initiatives', 'projects', 'workspace']);
+        assert.deepEqual(securityState.apiKeys, ['attachments', 'capabilities', 'changes', 'clipboard', 'connections', 'documents', 'hosts', 'initiativeApp', 'initiatives', 'projects', 'workspace']);
         await uiHelpers.assertNoSeriousA11yViolations(page, '文档阅读');
         await uiHelpers.assertNoPageOverflow(page, '文档阅读');
         await uiHelpers.assertReachable(page, ['[data-panel="tasks"]', '[data-mode="rendered"]', '[data-mode="raw"]', '[data-action="copy-path"]'], '文档阅读');
@@ -617,7 +618,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         var repositoryContext = await page.evaluate(function () {
             return { title: document.title, project: document.querySelector('#project-picker-name').textContent };
         });
-        assert.deepEqual(repositoryContext, { title: 'OpenSpecGUI · OpenSpec GUI', project: 'OpenSpecGUI' });
+        assert.deepEqual(repositoryContext, { title: 'OpenSpecGUI · Agent Workbench', project: 'OpenSpecGUI' });
         await page.locator('.primary-nav [data-route="archives"]').click();
         await page.waitForSelector('.document-row[data-entity-id="2026-08-24-refine-workbench-visual-system"]');
         var archiveListCopy = page.locator('.document-row-shell[data-entity-id="2026-08-24-refine-workbench-visual-system"] [data-action="copy-proposal-name"]');
@@ -658,6 +659,7 @@ test('独立 Electron 应用完成多项目任务工作流与视觉验收', { ti
         }, atlas.id);
         await page.reload();
         await page.waitForFunction(function () { return document.title.indexOf('atlas-workbench') === 0; });
+        await page.locator('.control-header').waitFor();
 
         var refreshed = await page.evaluate(function () { return window.openSpecGUI.workspace.refresh(); });
         assert.equal(refreshed.snapshot.project.name, 'atlas-workbench');

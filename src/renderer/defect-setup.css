@@ -1,0 +1,29 @@
+.df-setup { min-width: 0; container-type: inline-size; color: var(--ink); }
+.df-tabs, .df-actions, .df-form-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.df-tabs { border-bottom: 1px solid var(--line); gap: 3px; }
+.df-tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 6px 10px; }
+.df-tabs button[aria-pressed=true] { color: var(--ink); border-bottom-color: var(--green); font-weight: 600; }
+.df-body { padding-block: 10px; }
+.df-body h3, .df-section summary { font-size: var(--text-control); font-weight: 550; margin: 0; }
+.df-feedback { font-size: var(--text-sm); color: var(--green); margin: 7px 0 0; overflow-wrap: anywhere; }
+.df-feedback:empty { display: none; }
+.df-feedback.is-error { color: var(--red); }
+.df-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px 12px; }
+.df-form > h3, .df-section { margin-top: 10px; }
+.df-field { display: grid; gap: 2px; min-width: 0; color: var(--muted); font-size: var(--text-sm); }
+.df-field input, .df-field select { min-width: 0; width: 100%; min-height: 30px; font-size: var(--text-control); border: 1px solid var(--line-strong); border-radius: 4px; color: var(--ink); padding: 3px 6px; background: var(--surface); }
+.df-section { border-top: 1px solid var(--line); }
+.df-section summary { cursor: pointer; padding: 7px 0; }
+.df-check, .df-grid > .df-repeater { grid-column: 1/-1; }
+.df-check { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); }
+.df-repeat-row { display: grid; grid-template-columns: minmax(95px,0.65fr) minmax(110px,1fr) auto; gap: 6px; align-items: end; margin: 5px 0; }
+.df-section .df-repeat-row { grid-template-columns: repeat(2,minmax(0,1fr)); border-left: 2px solid var(--line); padding-left: 8px; }
+.df-repeat-row button { justify-self: start; }
+.df-form-foot { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 9px; }
+.df-note, .df-auth-row p { color: var(--muted); font-size: var(--text-sm); margin: 3px 0 8px; overflow-wrap: anywhere; }
+.df-auth-row { padding: 9px 0; border-bottom: 1px solid var(--line); }
+.df-auth-row strong { font-size: var(--text-control); font-weight: 550; }
+.df-body > .df-actions { margin-top: 8px; }
+@container (max-width: 360px) { .df-grid,.df-section .df-repeat-row { grid-template-columns: 1fr; } .df-tabs button { padding-inline: 5px; } .df-repeat-row { grid-template-columns: 1fr 1fr; } }
+
+.df-command { font: 12px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }

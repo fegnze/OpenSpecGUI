@@ -1,4 +1,4 @@
-# OpenSpec GUI 视觉基线
+# Agent Workbench 视觉基线
 
 ## 选定方向
 

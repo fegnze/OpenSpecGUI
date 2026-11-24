@@ -1,0 +1,9 @@
+{
+  "provider": "cv-test1",
+  "transport": "streamable-http",
+  "url": "https://slots-team-test-server-v0.me2zengame.com/social-server/mcp",
+  "authentication": {
+    "type": "bearer",
+    "header": "Authorization"
+  }
+}

@@ -148,6 +148,22 @@ function normalizeRelinkRequest(request) {
     };
 }
 
+function normalizeAttachmentRequest(request, read) {
+    var keys = ['projectId', 'revision', 'entityType', 'changeId'];
+    var value = requestObject(request, read ? keys.concat(['id', 'offset']) : keys, '提案附件请求');
+    if (!Number.isSafeInteger(value.revision) || value.revision < 0) { throw new Error('工作区 revision 无效'); }
+    if (!['active', 'archive'].includes(value.entityType)) { throw new Error('提案类型无效'); }
+    var result = { projectId: requireString(value.projectId, '项目 ID', 36, PROJECT_ID_PATTERN),
+        revision: value.revision, entityType: value.entityType,
+        changeId: requireString(value.changeId, '提案 ID', 255, /^[A-Za-z0-9][A-Za-z0-9._-]*$/) };
+    if (read) {
+        if (!Number.isSafeInteger(value.offset) || value.offset < 0) { throw new Error('附件读取位置无效'); }
+        result.id = requireString(value.id, '附件 ID', 36, PROJECT_ID_PATTERN);
+        result.offset = value.offset;
+    }
+    return result;
+}
+
 function normalizeDocumentRequest(request) {
     var value = requestObject(request, ['projectId', 'revision', 'documentId'], '文档请求');
     var revision = value.revision;
@@ -199,6 +215,133 @@ function registerIpc(options) {
         }
     }
 
+    if (options.hostIntegration) {
+        ['inspect', 'verification'].forEach(function (operation) {
+            ipcMain.handle('hosts:' + operation, function (event, ...args) {
+                assertTrustedRenderer(event);
+                if (args.length) { throw new Error('宿主检测不接受参数'); }
+                return options.hostIntegration[operation]();
+            });
+        });
+        ['install', 'remove'].forEach(function (operation) {
+            ipcMain.handle('hosts:' + operation, function (event, ...args) {
+                assertTrustedRenderer(event);
+                if (args.length !== 1) { throw new Error('宿主接入请求参数无效'); }
+                var value = requestObject(args[0], ['host', 'planId'], '宿主接入请求');
+                if (!['codex', 'claude', 'dsh'].includes(value.host)) { throw new Error('宿主无效'); }
+                var planId = requireString(value.planId, '接入计划', 64, SOURCE_HASH_PATTERN);
+                return options.hostIntegration[operation]({ host: value.host, planId: planId });
+            });
+        });
+        ipcMain.handle('hosts:records', function (event, ...args) {
+            assertTrustedRenderer(event);
+            if (args.length !== 1) { throw new Error('回执查询参数无效'); }
+            var value = requestObject(args[0], ['projectId', 'host', 'cursor'], '回执查询');
+            var projectId = requireString(value.projectId, '项目 ID', 36, PROJECT_ID_PATTERN);
+            if (!['all', 'codex', 'claude', 'dsh'].includes(value.host)) { throw new Error('宿主筛选无效'); }
+            return options.hostIntegration.records({ projectId: projectId, host: value.host, cursor: value.cursor == null ? null :
+                requireString(value.cursor, '回执游标', 57, /^\d{13}-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\.(?:codex|claude|dsh)$/) });
+        });
+    }
+    if (options.capabilities) {
+        var capabilityOperations = {
+            list: ['projectId', 'host'],
+            rename: ['id', 'name', 'expectedName', 'host', 'projectId'],
+            preview: ['operation', 'id', 'version', 'scope', 'host', 'projectId'],
+            apply: ['planId', 'projectId']
+        };
+        Object.entries(capabilityOperations).forEach(function (entry) {
+            ipcMain.handle('capabilities:' + entry[0], function (event, request) {
+                assertTrustedRenderer(event);
+                var value = requestObject(request, entry[1], '能力接入请求');
+                if (value.projectId != null) { requireString(value.projectId, '项目 ID', 36, PROJECT_ID_PATTERN); }
+                if (entry[0] === 'apply') { requireString(value.planId, '计划 ID', 48, /^[a-f0-9]{48}$/); }
+                return options.capabilities[entry[0]](value);
+            });
+        });
+    }
+    if (options.projectServices) {
+        ipcMain.handle('capabilities:defect-config', async function (event, request) {
+            assertTrustedRenderer(event);
+            var fields = request && request.action === 'save-settings' ? ['revision','values'] :
+                request && request.action === 'authorize' ? ['provider'] : [];
+            var value = requestObject(request, ['projectId','host','action'].concat(fields), '飞书缺陷项目设置');
+            var id = requireString(value.projectId, '项目 ID', 36, PROJECT_ID_PATTERN);
+            var ctx = await options.capabilities.requireBinding(value, 'feishu-defect-agent');
+            var scoped = await options.projectServices.defect(ctx);
+            if (value.action === 'read-settings') { return scoped.defectBinding.readSettings(id); }
+            if (value.action === 'save-settings') {
+                var revision = requireString(value.revision, '配置版本', 128);
+                if (!value.values || typeof value.values !== 'object' || Array.isArray(value.values)) { throw new Error('缺陷设置表单无效'); }
+                return scoped.defectBinding.saveSettings(id, revision, value.values);
+            }
+            if (value.action === 'check-auth') { return scoped.defectAuth.check(id); }
+            if (value.action === 'authorize') {
+                if (!['meegle','feishu'].includes(value.provider)) { throw new Error('未知的缺陷授权提供方'); }
+                return scoped.defectAuth.authorize(id, value.provider);
+            }
+            if (value.action === 'status') { return scoped.defectBinding.status(id); }
+            if (value.action === 'template') { return scoped.defectBinding.template(id); }
+            if (value.action === 'link') {
+                var picked = await dialog.showOpenDialog(windowProvider(), { title: '选择飞书缺陷单项目绑定', properties: ['openFile'], filters: [{ name: '项目设置', extensions: ['json'] }] });
+                if (picked.canceled || !picked.filePaths.length) { return { canceled: true }; }
+                await options.capabilities.requireBinding(value, 'feishu-defect-agent');
+                return scoped.defectBinding.link(id, picked.filePaths[0]);
+            }
+            if (value.action === 'reveal') {
+                var status = await scoped.defectBinding.status(id);
+                if (!status.path) { throw new Error('请先关联项目设置或生成示例'); }
+                options.revealFile(status.path);
+                return status;
+            }
+            throw new Error('未知的飞书缺陷项目设置操作');
+        });
+    }
+    if (options.projectServices) {
+        var pendingBindingChecks = new Map();
+        // 同一绑定的授权和取消共用正在进行的校验，按收到请求的顺序交给连接服务。
+        function authorizationBinding(value) {
+            var key = JSON.stringify([value.projectId, value.host, value.provider]);
+            if (!pendingBindingChecks.has(key)) {
+                var check = options.capabilities.requireBinding(value, value.provider)
+                    .finally(function () { pendingBindingChecks.delete(key); });
+                pendingBindingChecks.set(key, check);
+            }
+            return pendingBindingChecks.get(key);
+        }
+
+        ['status','connect','cancelAuthorization','reuse','verify','disconnect'].forEach(function (operation) {
+            ipcMain.handle('connections:' + operation, async function (event, request) {
+                assertTrustedRenderer(event);
+                var configure = operation === 'connect' || operation === 'reuse';
+                var value = requestObject(request, ['projectId','host','provider'].concat(configure ? ['settings'] : []), '连接请求');
+                requireString(value.projectId, '项目 ID', 36, PROJECT_ID_PATTERN);
+                if (!['cv-test1','feishu','google-drive'].includes(value.provider)) { throw new Error('未知连接'); }
+                var oauth = value.provider !== 'cv-test1';
+                if (!oauth && operation === 'cancelAuthorization') { throw new Error('只有文档服务支持取消浏览器授权'); }
+                var settings;
+                if (configure) {
+                    if (operation === 'connect' && (!value.settings || typeof value.settings !== 'object' || Array.isArray(value.settings))) {
+                        throw new Error('认证参数无效');
+                    }
+                    var fields;
+                    if (operation === 'reuse') { fields = value.provider === 'feishu' ? ['documentId'] : []; }
+                    else if (oauth && Object.keys(value.settings).length === 0) { fields = []; }
+                    else { fields = value.provider === 'cv-test1' ? ['token'] : value.provider === 'feishu' ? ['clientId','clientSecret','documentId'] : ['clientId','clientSecret']; }
+                    settings = requestObject(value.settings, fields, '认证参数');
+                    fields.forEach(function (field) {
+                        if (typeof settings[field] !== 'string' || settings[field].length > 8192) { throw new Error('认证参数无效'); }
+                    });
+                }
+                var ctx = oauth && (operation === 'connect' || operation === 'cancelAuthorization')
+                    ? await authorizationBinding(value) : await options.capabilities.requireBinding(value, value.provider);
+                var result = await options.projectServices.connection(ctx, value.provider, operation, settings);
+                await options.capabilities.requireBinding(value, value.provider);
+                return result;
+            });
+        });
+    }
+
     ipcMain.handle('projects:list', function () {
         return service.listProjects();
     });
@@ -207,7 +350,7 @@ function registerIpc(options) {
         var paths = normalizePaths(request);
         if (!paths.length) {
             var selected = await dialog.showOpenDialog(windowProvider(), {
-                title: '添加 OpenSpec 项目',
+                title: '添加本地项目',
                 buttonLabel: '添加项目',
                 properties: ['openDirectory', 'createDirectory']
             });
@@ -223,7 +366,7 @@ function registerIpc(options) {
         var parentPath = normalizeOptionalPath(request, '扫描路径');
         if (!parentPath) {
             var selected = await dialog.showOpenDialog(windowProvider(), {
-                title: '扫描 OpenSpec 项目',
+                title: '扫描本地项目',
                 buttonLabel: '扫描此目录',
                 properties: ['openDirectory']
             });
@@ -249,7 +392,7 @@ function registerIpc(options) {
         var rootPath = normalized.path;
         if (!rootPath) {
             var selected = await dialog.showOpenDialog(windowProvider(), {
-                title: '重新关联 OpenSpec 项目',
+                title: '重新关联本地项目',
                 buttonLabel: '关联此目录',
                 properties: ['openDirectory']
             });
@@ -259,6 +402,15 @@ function registerIpc(options) {
             rootPath = selected.filePaths[0];
         }
         return { canceled: false, registry: await service.relinkProject(projectId, requireString(rootPath, '项目路径', 4096)) };
+    });
+
+    ipcMain.handle('attachments:list', function (event, request) {
+        assertTrustedRenderer(event);
+        return service.listAttachments(normalizeAttachmentRequest(request, false));
+    });
+    ipcMain.handle('attachments:read', function (event, request) {
+        assertTrustedRenderer(event);
+        return service.readAttachment(normalizeAttachmentRequest(request, true));
     });
 
     ipcMain.handle('workspace:load', function () {

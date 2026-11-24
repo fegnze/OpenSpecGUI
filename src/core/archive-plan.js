@@ -6,6 +6,7 @@ var os = require('node:os');
 var path = require('node:path');
 var files = require('./archive-files');
 var cliModule = require('./archive-cli');
+var projectRules = require('./archive-project-rules');
 
 function localDate(now) {
     var date = now ? new Date(now()) : new Date();
@@ -38,6 +39,8 @@ async function prepare(projectRoot, changeId, options) {
     var settings = options || {};
     var cli = await cliModule.resolve(projectRoot, settings.cliOptions);
     var before = await files.capture(projectRoot, changeId, settings.limits);
+    var rules = await projectRules.capture(projectRoot, cli, settings);
+    await projectRules.verifyLanguage(rules.language);
     var source = 'openspec/changes/' + changeId;
     var date = localDate(settings.now);
     var name = archiveName(changeId, date);
@@ -61,7 +64,8 @@ async function prepare(projectRoot, changeId, options) {
         if (!Array.isArray(validation.items) || validation.items.length !== 1 || validation.items[0].id !== changeId || validation.items[0].valid !== true) {
             throw files.fail('ARCHIVE_VALIDATION_FAILED', 'CLI 未确认所选变更通过结构校验');
         }
-        var result = await cliModule.run(cli, temporary, ['archive', changeId, '--json', '--yes'], settings);
+        var archiveArgs = ['archive', changeId, '--json', '--yes'];
+        var result = await cliModule.run(cli, temporary, archiveArgs, settings);
         cliModule.assertRoot(result, temporary);
         if (!result.archive || result.archive.change !== changeId || result.archive.archivedAs !== name || path.resolve(result.archive.path) !== files.resolveInside(temporary, destination)) {
             throw files.fail('ARCHIVE_CLI_INCOMPATIBLE', 'CLI 归档结果与预期目标不一致，请重新检查或更新 CLI');
@@ -111,33 +115,45 @@ async function prepare(projectRoot, changeId, options) {
                 if (!after.has(originalSpec[0]) || after.get(originalSpec[0]).hash !== originalSpec[1].hash) { throw files.fail('ARCHIVE_RESULT_INVALID', 'CLI 丢弃了规范目录中的其他文件'); }
             }
         }
+        if (rules.requireSyncedSpecs && changes.length) {
+            throw files.fail('ARCHIVE_SYNC_REQUIRED', '请先按项目流程同步以下正式规范，再重新检查归档：' + changes.map(function (change) { return change.path; }).join('、'));
+        }
         var warnings = status.artifacts.filter(function (artifact) { return artifact.status !== 'done' && artifact.status !== 'skipped'; }).map(function (artifact) { return { id: 'artifact:' + artifact.id, message: '产物尚未完成：' + artifact.id }; });
         if (tasks.completed < tasks.total) { warnings.push({ id: 'tasks:incomplete', message: '仍有 ' + (tasks.total - tasks.completed) + ' 项任务未完成' }); }
-        (result.archive.warnings || []).forEach(function (warning, index) { warnings.push({ id: 'cli:' + index, message: String(warning) }); });
-        var currentInputs = await files.capture(projectRoot, changeId, settings.limits);
-        var currentCli = await cliModule.resolve(projectRoot, settings.cliOptions);
-        if (files.digest(before) !== files.digest(currentInputs) || files.identityDigest(before) !== files.identityDigest(currentInputs) || cli.fingerprint !== currentCli.fingerprint) {
-            throw files.fail('ARCHIVE_STALE', '预检期间文件或 CLI 已变化，请重新检查');
-        }
-        await assertAbsent(projectRoot, destination);
+        (result.archive.warnings || []).forEach(function (warning, index) { warnings.push({ id: 'cli:' + index, message: String(warning).split(temporary + path.sep).join('') }); });
         var deltaPaths = status.artifactPaths.specs && status.artifactPaths.specs.existingOutputPaths;
         if (deltaPaths !== undefined && !Array.isArray(deltaPaths)) { throw files.fail('ARCHIVE_CLI_INCOMPATIBLE', 'CLI 增量规范路径无效'); }
-        return {
+        var plan = {
             id: crypto.randomBytes(24).toString('hex'), root: projectRoot, changeId: changeId, source: source, destination: destination, archivedAs: name,
-            date: date, createdAt: Date.now(), cli: cli, cliOptions: settings.cliOptions, before: before, inputHash: files.digest(before), inputIdentity: files.identityDigest(before), changeHash: files.digest(before, source), changes: changes,
+            date: date, createdAt: Date.now(), cli: cli, cliOptions: settings.cliOptions, archiveArgs: archiveArgs, ruleFingerprint: rules.fingerprint, before: before, inputHash: files.digest(before), inputIdentity: files.identityDigest(before), changeHash: files.digest(before, source), changes: changes,
             preview: { changeId: changeId, destination: destination, archivedAs: name, tasks: { completed: tasks.completed, total: tasks.total }, artifacts: status.artifacts.map(function (artifact) { return { id: artifact.id, status: artifact.status }; }), warnings: warnings, syncState: changes.length ? 'needs-sync' : (deltaPaths && deltaPaths.length ? 'already-synced' : 'no-delta'), changes: changes.map(function (change) { return { path: change.path, kind: change.kind, lines: diffLines(change.before, change.after) }; }) }
         };
+        plan.reviewFingerprint = files.hash(JSON.stringify([projectRoot, changeId, name, archiveArgs, plan.inputHash, plan.inputIdentity,
+            cli.fingerprint, rules.fingerprint, tasks, plan.preview.artifacts, warnings, plan.preview.syncState,
+            changes.map(function (change) { return [change.path, change.kind, change.beforeHash, change.afterHash]; })]));
+        plan.preview.reviewFingerprint = plan.reviewFingerprint;
+        await revalidate(plan, settings);
+        return plan;
     } finally { await fs.rm(temporary, { recursive: true, force: true }); }
+}
+
+async function revalidateRules(plan, options) {
+    var settings = options || {};
+    var currentCli = await cliModule.resolve(plan.root, plan.cliOptions);
+    var rules = await projectRules.capture(plan.root, currentCli, settings);
+    if (Date.now() - plan.createdAt > (settings.planTtlMs || 10 * 60 * 1000) || archiveName(plan.changeId, localDate(settings.now)) !== plan.archivedAs || plan.cli.fingerprint !== currentCli.fingerprint || plan.ruleFingerprint !== rules.fingerprint) {
+        throw files.fail('ARCHIVE_STALE', '归档预览已失效，CLI、项目规则或日期发生变化，请重新检查');
+    }
 }
 
 async function revalidate(plan, options) {
     var settings = options || {};
     var inputs = await files.capture(plan.root, plan.changeId, settings.limits);
-    var currentCli = await cliModule.resolve(plan.root, plan.cliOptions);
-    if (Date.now() - plan.createdAt > (settings.planTtlMs || 10 * 60 * 1000) || archiveName(plan.changeId, localDate(settings.now)) !== plan.archivedAs || plan.inputHash !== files.digest(inputs) || plan.inputIdentity !== files.identityDigest(inputs) || plan.cli.fingerprint !== currentCli.fingerprint) {
-        throw files.fail('ARCHIVE_STALE', '预览已失效，文件、CLI 或日期发生变化，请重新检查');
+    if (plan.inputHash !== files.digest(inputs) || plan.inputIdentity !== files.identityDigest(inputs)) {
+        throw files.fail('ARCHIVE_STALE', '归档预览已失效，项目文件或目录身份发生变化，请重新检查');
     }
+    await revalidateRules(plan, settings);
     await assertAbsent(plan.root, plan.destination);
 }
 
-module.exports = { prepare: prepare, revalidate: revalidate, assertAbsent: assertAbsent, localDate: localDate, archiveName: archiveName, diffLines: diffLines };
+module.exports = { prepare: prepare, revalidate: revalidate, revalidateRules: revalidateRules, assertAbsent: assertAbsent, localDate: localDate, archiveName: archiveName, diffLines: diffLines };

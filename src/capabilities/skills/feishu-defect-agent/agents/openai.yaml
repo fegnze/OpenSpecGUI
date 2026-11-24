@@ -1,0 +1,6 @@
+interface:
+  display_name: "飞书缺陷 Agent"
+  short_description: "接通飞书项目，委派缺陷排查并逐条交付、同步结果与交接事项"
+  default_prompt: "使用 $feishu-defect-agent 处理当前绑定工程的指定飞书缺陷或视图。"
+policy:
+  allow_implicit_invocation: true

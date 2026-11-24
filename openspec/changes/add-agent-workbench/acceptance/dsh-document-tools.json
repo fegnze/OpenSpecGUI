@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-24",
+  "workbenchVersion": "0.7.0",
+  "host": "DeepSeek Harness 0.2.2-rc.5 (headless)",
+  "testEnvironment": {
+    "project": "两个隔离的本机 Git 工作树",
+    "hostPlugin": "桌面包内置 DSH 原生工具运行时加载工作台插件",
+    "workbench": "使用生产能力登记、稳定启动器、本地 IPC、按项目及宿主选择的文档连接和飞书驱动",
+    "fixtures": "确定性模型、测试用 OAuth 记录和存储适配器、内存飞书 API 响应；写入仅在夹具完成"
+  },
+  "sessions": [
+    {
+      "case": "no-grant",
+      "sessionId": "session-f1777166-bd0f-4034-bb39-257784fde890",
+      "declaredDocumentTools": [
+        "workbench_feishu_add_comment",
+        "workbench_feishu_read_document"
+      ],
+      "calls": [
+        {
+          "tool": "workbench_feishu_read_document",
+          "status": "error",
+          "result": "Error: 请在工作台当前项目和宿主的能力绑定页面连接文档服务。"
+        }
+      ]
+    },
+    {
+      "case": "scoped-other",
+      "sessionId": "session-112fb47a-996f-4f07-9d2f-797d43672647",
+      "declaredDocumentTools": [],
+      "calls": []
+    },
+    {
+      "case": "read-comment",
+      "sessionId": "session-0556bd02-1ad7-48f8-94e5-c2c07f0a7688",
+      "declaredDocumentTools": [
+        "workbench_feishu_add_comment",
+        "workbench_feishu_read_document"
+      ],
+      "calls": [
+        {
+          "tool": "workbench_feishu_read_document",
+          "status": "completed",
+          "result": "{\"documentId\":\"FixtureDocx0001\",\"content\":\"Native DSH fixture content\",\"offset\":0,\"nextOffset\":null,\"totalLength\":26}"
+        },
+        {
+          "tool": "workbench_feishu_add_comment",
+          "status": "completed",
+          "result": "{\"documentId\":\"FixtureDocx0001\",\"commentId\":\"FixtureComment001\",\"placement\":\"document_end\",\"blockId\":\"FixtureEnd00001\"}"
+        }
+      ]
+    }
+  ],
+  "checkedWrites": {
+    "count": 1,
+    "placement": "document_end",
+    "expectedLastBlock": "FixtureEnd00001",
+    "text": "测试",
+    "commentId": "FixtureComment001"
+  }
+}

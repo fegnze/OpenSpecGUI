@@ -10,7 +10,7 @@
 }(typeof window === 'undefined' ? null : window, function () {
     'use strict';
 
-    var VIEWS = ['overview', 'specs', 'archives', 'detail', 'search', 'initiatives', 'initiative'];
+    var VIEWS = ['overview', 'specs', 'archives', 'detail', 'search', 'initiatives', 'initiative', 'binding', 'hook-records', 'host-setup'];
 
     function safeValue(params, name, maximum) {
         var value = params.get(name) || '';
@@ -21,13 +21,16 @@
         var params = new URLSearchParams(String(hash || '').replace(/^#/, ''));
         var requestedView = safeValue(params, 'view', 32) || 'overview';
         var legacyChanges = requestedView === 'changes';
-        var view = legacyChanges ? 'overview' : requestedView;
+        var legacyCapabilities = requestedView === 'capabilities';
+        var view = legacyCapabilities ? 'binding' : (legacyChanges ? 'overview' : requestedView);
+        if (legacyCapabilities) { params = new URLSearchParams(); }
         if (VIEWS.indexOf(view) === -1) {
             view = 'overview';
         }
         return {
             view: view,
             legacyChanges: legacyChanges,
+            legacyCapabilities: legacyCapabilities,
             entityType: safeValue(params, 'type', 32),
             entityId: safeValue(params, 'id', 180),
             documentId: safeValue(params, 'doc', 512),

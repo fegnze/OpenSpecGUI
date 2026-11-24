@@ -1,0 +1,13 @@
+{
+  "provider": "feishu",
+  "type": "oauth",
+  "flow": "authorization-code",
+  "clientType": "feishu-custom-app",
+  "access": "read-write",
+  "scopes": [
+    "docx:document",
+    "wiki:node:read",
+    "docs:document.comment:create",
+    "offline_access"
+  ]
+}

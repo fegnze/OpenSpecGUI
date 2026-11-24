@@ -107,4 +107,9 @@ test('关键工作台界面视觉基线', async function () {
         mask: [page.locator('.project-registry-copy small')],
         maskColor: '#6b7280'
     });
+
+    await page.keyboard.press('Escape');
+    await page.locator('.primary-nav [data-route="binding"]').click();
+    await page.locator('[data-capability-id="cv-test1"] .cap-item-link').click();
+    await screenshot('project-capabilities-wide-light.png');
 });

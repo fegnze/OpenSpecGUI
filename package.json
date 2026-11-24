@@ -1,14 +1,14 @@
 {
-  "name": "openspec-gui",
-  "productName": "OpenSpec GUI",
-  "version": "0.1.0",
-  "description": "A local, multi-project OpenSpec desktop workbench",
+  "name": "agent-workbench",
+  "productName": "Agent Workbench",
+  "version": "0.8.0",
+  "description": "A desktop workbench for team agent capabilities and OpenSpec projects",
   "main": "src/main/index.js",
   "private": true,
   "license": "MIT",
   "author": "OpenSpec GUI Contributors",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "start": "electron-forge start",
@@ -22,14 +22,16 @@
     "package:mac": "npm run package:mac:arm64 && npm run package:mac:x64",
     "package:mac:arm64": "electron-forge package --platform=darwin --arch=arm64 && node scripts/verify-package.js --arch arm64",
     "package:mac:x64": "electron-forge package --platform=darwin --arch=x64 && node scripts/verify-package.js --arch x64",
+    "release:mac": "node scripts/mac-release.js build",
+    "release:publish": "node scripts/mac-release.js publish",
     "make": "electron-forge make",
     "make:mac:arm64": "electron-forge make --platform=darwin --arch=arm64",
     "make:mac:x64": "electron-forge make --platform=darwin --arch=x64"
   },
   "devDependencies": {
-    "@electron/asar": "4.3.0",
     "@electron-forge/cli": "8.0.0-alpha.9",
     "@electron-forge/maker-zip": "8.0.0-alpha.9",
+    "@electron/asar": "4.3.0",
     "@playwright/test": "1.62.1",
     "axe-core": "4.13.0",
     "electron": "43.4.1",
@@ -42,6 +44,8 @@
     "tmp": "0.2.7"
   },
   "dependencies": {
+    "semver": "7.8.5",
+    "smol-toml": "1.9.1",
     "yaml": "2.8.1"
   }
 }

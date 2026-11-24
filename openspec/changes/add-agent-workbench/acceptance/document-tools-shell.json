@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-24",
+  "workbenchVersion": "0.7.0",
+  "scope": "真实宿主启动钩子及 shell 调用，独立临时 Git 工作树和用户目录",
+  "model": "确定性本机回环服务",
+  "provider": "Google Drive 接口返回模拟的文件元数据",
+  "workbench": "生产代码的启动器、工具路由、Unix socket 和 Drive 驱动，授权回调及 HTTP 响应使用夹具",
+  "cases": [
+    {
+      "host": "codex",
+      "hostVersion": "0.171.0-alpha.13",
+      "binding": "google-drive@1.0.0",
+      "sessionStartReportedStableEntryToModel": true,
+      "shellToolUsed": "exec_command",
+      "shellActions": [
+        "list",
+        "call google_drive_list_files(pageSize=1)"
+      ],
+      "providerResultPresentInNextModelRequest": true,
+      "exitCode": 0
+    },
+    {
+      "host": "claude",
+      "hostVersion": "2.1.327",
+      "binding": "google-drive@1.0.0",
+      "sessionStartReportedStableEntryToModel": true,
+      "shellToolUsed": "Bash",
+      "shellActions": [
+        "list",
+        "call google_drive_list_files(pageSize=1)"
+      ],
+      "providerResultPresentInNextModelRequest": true,
+      "exitCode": 0
+    }
+  ]
+}

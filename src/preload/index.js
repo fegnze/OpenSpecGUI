@@ -8,6 +8,28 @@ function invoke(channel, payload) {
 }
 
 contextBridge.exposeInMainWorld('openSpecGUI', Object.freeze({
+    hosts: Object.freeze({
+        inspect: function () { return ipcRenderer.invoke('hosts:inspect'); },
+        verification: function () { return ipcRenderer.invoke('hosts:verification'); },
+        records: function (request) { return invoke('hosts:records', request); },
+        install: function (request) { return invoke('hosts:install', request); },
+        remove: function (request) { return invoke('hosts:remove', request); }
+    }),
+    capabilities: Object.freeze({
+        list: function (request) { return invoke('capabilities:list', request); },
+        rename: function (request) { return invoke('capabilities:rename', request); },
+        preview: function (request) { return invoke('capabilities:preview', request); },
+        apply: function (request) { return invoke('capabilities:apply', request); },
+        defectConfig: function (request) { return invoke('capabilities:defect-config', request); }
+    }),
+    connections: Object.freeze({
+        status: function (request) { return invoke('connections:status', request); },
+        connect: function (request) { return invoke('connections:connect', request); },
+        cancelAuthorization: function (request) { return invoke('connections:cancelAuthorization', request); },
+        reuse: function (request) { return invoke('connections:reuse', request); },
+        verify: function (request) { return invoke('connections:verify', request); },
+        disconnect: function (request) { return invoke('connections:disconnect', request); }
+    }),
     projects: Object.freeze({
         list: function () { return invoke('projects:list'); },
         add: function (request) { return invoke('projects:add', request || {}); },
@@ -30,6 +52,10 @@ contextBridge.exposeInMainWorld('openSpecGUI', Object.freeze({
         prepareArchive: function (request) { return invoke('changes:prepare-archive', request); },
         commitArchive: function (request) { return invoke('changes:commit-archive', request); },
         discardArchive: function (request) { return invoke('changes:discard-archive', request); }
+    }),
+    attachments: Object.freeze({
+        list: function (request) { return invoke('attachments:list', request); },
+        read: function (request) { return invoke('attachments:read', request); }
     }),
     documents: Object.freeze({
         read: function (request) { return invoke('documents:read', request); }

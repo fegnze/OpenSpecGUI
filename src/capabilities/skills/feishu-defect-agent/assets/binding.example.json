@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "cli": {
+    "profile": "feishu-defect-agent"
+  },
+  "host": "project.feishu.cn",
+  "project_key": "EXAMPLE_PROJECT_KEY",
+  "work_item_type": "issue",
+  "owners_semantics": "current_state_operator",
+  "issue_url_template": "https://project.feishu.cn/EXAMPLE_SPACE/issue/detail/{issue_id}",
+  "sources": [
+    { "kind": "view", "id": "EXAMPLE_VIEW_ID" }
+  ],
+  "fields": {
+    "title": "name",
+    "state": "work_item_status",
+    "priority": "priority",
+    "owners": "current_status_operator",
+    "description": "description"
+  },
+  "budgets": {
+    "candidate_limit": 5,
+    "summary_max_bytes": 8192,
+    "worker_result_max_bytes": 8192
+  },
+  "repositories": [
+    {
+      "id": "current",
+      "delivery": {}
+    }
+  ],
+  "handoff": {
+    "directory": "docs/defect-handoffs"
+  },
+  "release_provider": "Jenkins",
+  "notifications": {
+    "provider": "feishu-app",
+    "app_id": "EXAMPLE_FEISHU_APP_ID",
+    "app_secret_env": "EXAMPLE_FEISHU_APP_SECRET_ENV"
+  }
+}
